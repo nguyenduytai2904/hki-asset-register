@@ -1,149 +1,124 @@
 # HKSpace Asset Register
 
-Composer package `hki/asset-register` for the HKSpace asset-register
-plugin. This package contains only the real Asset Register domain; starter
-screens such as Hello World and the old Equipment CRUD are intentionally not
-part of the plugin.
-
-## Identity
+Composer package `hki/asset-register` adds an account-scoped asset register to
+HKSpace. It is intended for account administrators and asset managers who
+maintain equipment catalogs and asset records, and for members who need to
+view assets assigned to them.
 
 | Item | Value |
 | --- | --- |
 | Composer package | `hki/asset-register` |
-| Namespace | `Hki\AssetRegister` |
 | Plugin code | `asset-register` |
 | Provider | `Hki\AssetRegister\AssetRegisterServiceProvider` |
-| Config | `config/asset-register.php` |
-
-## Structure
-
-```text
-asset-register/
-├── composer.json
-├── config/asset-register.php
-├── database/
-│   ├── factories/
-│   ├── migrations/
-│   └── seeders/AssetRegisterDevelopmentSeeder.php
-├── lang/{vi,en}/
-├── routes/{web.php,api.php}
-├── src/
-│   ├── Asset/
-│   │   ├── Contracts/{Repositories,Services}/
-│   │   ├── DTOs/
-│   │   ├── Factories/
-│   │   ├── Http/{Controllers,Requests}/
-│   │   ├── Models/
-│   │   ├── Policies/
-│   │   ├── Repositories/
-│   │   └── Services/
-│   ├── Console/Commands/
-│   ├── Lifecycle/
-│   ├── Rbac/
-│   ├── Support/
-│   ├── AssetRegisterModule.php
-│   └── AssetRegisterServiceProvider.php
-└── tests/
-```
-
-Controllers are HTTP adapters: they accept FormRequests, use factories to
-create DTOs, call services through interfaces, then return views or redirects.
-Policies own permission decisions and are invoked by FormRequests before
-validation; services retain defensive policy checks and implement use cases.
-Persistence queries and transactions are behind repository interfaces. The
-plugin service provider binds the repository and registers the domain policy.
-
-## Wave 1: UC-001 to UC-003
-
-The first web slice provides the permission-aware Asset Register entry point
-and the “My assets”, “Asset register” and “Settings” tabs. Settings reads and
-mutates the active account's asset-type and location catalogs. Catalog names
-are unique per account, case-insensitive and accent-sensitive; a type prefix
-cannot change after its first asset, and a catalog item in use cannot be
-deleted.
-
-The page routes and catalog mutations are registered in `routes/web.php`.
-The “My assets” page remains a static development preview until its later
-self-service use case.
-
-## Wave 2: UC-004 to UC-007
-
-The asset register now reads account-scoped records from the database and
-supports search, status/type/location/warranty filters, sort orders and
-pagination. Managers can add assets with an account-specific generated or
-manual code; automatic sequences are stored on each type and skip occupied
-codes without advancing for manually entered codes. Creation writes the
-initial history entry. Registry filters update asynchronously as values change.
-Asset and catalog creation forms open in dialogs, and plugin screens scroll
-within the content area below the core's fixed header and sidebar.
-
-Asset details and editing enforce account and permission boundaries. Current
-or pending keepers without register access can open only their own limited
-detail view. Editing never changes the asset code, retains the current
-disabled type/location when unchanged, rejects selecting other disabled
-catalog entries, and records changed values in immutable history. Disposed
-records are read-only; disposal actions themselves are not implemented in
-this wave.
-
-UC-008, handover actions, status transitions and disposal actions remain
-outside this release. The `AssetRegisterPreviewData` fixture may still be
-used by development tooling, but it is no longer the data source for the live
-registry or settings screens.
-
-## Database
-
-The plugin owns exactly five tables:
-
-- `asset_types`
-- `asset_locations`
-- `assets`
-- `asset_handovers`
-- `asset_histories`
-
-Every account-owned table is scoped by `account_id`. The migration
-`000006_remove_legacy_template_equipment_table.php` only removes the obsolete
-local demo table from an existing installation; it is not part of the current
-domain model.
+| Module class | `Hki\AssetRegister\AssetRegisterModule` |
+| Required plugin API contract | `hki/hkspace-plugin-api ^1.2` |
+| Runtime | PHP `^8.2`, Laravel `^12.0` |
 
 ## Permissions
 
-The plugin registers exactly these account-scoped permissions:
+The plugin registers these account-scoped permission keys in the **Tài sản**
+group. The account must also have the plugin granted and active.
 
-- `asset-register.self.use`
-- `asset-register.assets.view`
-- `asset-register.assets.manage`
+| Key | Label | Allowed actions |
+| --- | --- | --- |
+| `asset-register.self.use` | Tự phục vụ | Open the “Của tôi” tab and view the member's assigned-asset area. |
+| `asset-register.assets.view` | Xem sổ tài sản | Open and read the account's asset register. |
+| `asset-register.assets.manage` | Quản lý sổ tài sản | Manage asset-type and location catalogs. Asset-record mutations require the register-view permission as well. |
 
-The permission provider is registered through
-`AccountPermissionCatalogRegistry`, so these permissions are available to the
-core role editor and full-access role synchronization.
+The core account `view` permission also grants the self-service entry point;
+the core account `manage` permission grants register viewing and management.
+Having only `asset-register.assets.manage` opens Settings but does not grant
+access to the register. Suspended account members and accounts without the
+plugin grant are blocked by the core access middleware.
 
-## Lifecycle
+## Configuration
 
-The package provides installer, account grant, account revoke, account
-uninstaller and full purge handlers:
+The plugin-specific PHP configuration is in `config/asset-register.php`.
 
-- Grant enables the plugin for an account.
-- Revoke removes access without deleting account data.
-- Uninstall deletes the selected account's asset data and supports preview.
-- Purge removes plugin tables in dependency-safe reverse order.
+| Environment variable | Default | Meaning | When to set |
+| --- | --- | --- | --- |
+| `ASSET_REGISTER_ENABLED` | `true` | Declared as `asset-register.enabled`. No runtime code currently reads this value; it is not an activation or security switch. | Do not rely on it to enable or disable the plugin. Use the core plugin catalog and account grant instead. |
+| `ASSET_REGISTER_DEMO_COMMAND_ALLOWED` | `true` | Declared as `asset-register.demo_command_allowed`. The demo command currently does not read this value. | Do not rely on it to authorize the demo command; the command itself rejects `APP_ENV=production`. |
+| `ASSET_REGISTER_BASE_URL` | `http://localhost` | Playwright's E2E base URL; this is a test-runner variable, not Laravel runtime configuration. | Set it to the non-production HKSpace URL under test. |
+| `APP_ENV` | Defined by HKSpace | The development seeder runs only in `local` and `testing`; the demo-data command refuses `production`. | Keep the core environment accurate. Never set a production host to `local` or `testing` to bypass the command guard. |
 
-## Local integration
+The plugin defines no database connection variables. Database driver,
+credentials and test-database isolation are inherited from the host HKSpace
+configuration. The demo seeder runs only in `local` and `testing`; the console
+demo-data command refuses to run in `production`.
 
-Add a path repository in the core project:
+## Background work and integrations
 
-```json
-{
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../asset-register",
-      "options": { "symlink": true }
-    }
-  ]
-}
+| Capability | Status |
+| --- | --- |
+| Queued jobs / queues | None registered by this plugin. |
+| Scheduled tasks | None registered by this plugin. |
+| Events emitted / listeners | None registered by this plugin. |
+| Realtime channels / broadcasts | None registered by this plugin. |
+| Plugin API routes | None currently defined in `routes/api.php`; plugin screens use authenticated web routes. |
+
+## Console commands
+
+| Signature | Effect | `--dry-run` |
+| --- | --- | --- |
+| `asset-register:demo-data {accountId} {--reset}` | Creates sample types, locations and assets for one existing account. Requires the six active sample members (`ha`, `khoa`, `bao`, `an`, `tam`, `huy` at `@sotaisan.test`). With `--reset`, deletes this plugin's history, handover, asset, type and location rows for that account before rebuilding them. The operation is transactional and refuses `APP_ENV=production`. | Not supported. `--reset` is destructive for the selected account; use only in an isolated development/test account. |
+
+The development/test fixture is
+`AssetRegisterDevelopmentSeeder`. It creates or resets the isolated workspace
+`Asset Register Test Workspace`, grants the plugin, prepares its sample
+members, and invokes the demo-data command. It is skipped outside `local` and
+`testing`.
+
+## System dependencies
+
+| Dependency | Minimum | Use |
+| --- | --- | --- |
+| PHP | `8.2` | Plugin runtime. |
+| Composer | Composer 2 / runtime API `^2.0` | Install the package and resolve its dependencies. |
+| HKSpace core | Laravel `12.x`; plugin API contract `^1.2` | Host application, plugin lifecycle, account context, RBAC and database services. |
+| Node.js and npm | Needed only for E2E test tooling | Install and run Playwright; not needed on the production application server. |
+| Playwright browser | Chromium installed with Playwright | Needed only when E2E scenarios are present and run. |
+
+The plugin requires no additional server executable, native extension,
+external storage service or realtime server beyond what the host HKSpace
+installation itself requires. Use the database engine configured by the
+host; migrations are run by Laravel.
+
+## Code layout
+
+```text
+config/                         Plugin configuration
+database/factories/             Plugin model factories
+database/migrations/            Plugin-owned schema
+database/seeders/               Development/test sample workspace
+lang/{en,vi}/                   Translations
+resources/views/asset-register/ Plugin pages and styles
+routes/{web.php,api.php}        Authenticated plugin routes
+src/Asset/
+  Contracts/{Repositories,Services}/ Interfaces consumed across layers
+  DTOs/                          Typed use-case data
+  Factories/                     Validated input to DTO mapping
+  Http/{Controllers,Requests}/   Thin web adapters and request validation
+  Models/                        Eloquent domain records
+  Policies/                      Asset and catalog authorization
+  Repositories/                  Account-scoped persistence
+  Services/                      Use-case orchestration
+src/Console/Commands/             Plugin Artisan commands
+src/Lifecycle/                    Install, grant, revoke, uninstall and purge
+src/Rbac/                         Permission keys and core permission provider
+src/Support/                      Cross-domain preview and schema helpers
+tests/                            Feature, architecture and E2E tests
 ```
 
-Then run:
+Controllers authorize and validate through FormRequests, map input through
+factories, and call service interfaces. Services call repository interfaces;
+repositories own database queries and transactions. Policies centralize
+permission decisions.
+
+## Development and testing
+
+For local development, add the package as a Composer path repository in the
+core project, then install/discover it and migrate using the host core:
 
 ```bash
 composer require hki/asset-register:@dev
@@ -153,49 +128,78 @@ php artisan plugin:sync --prune
 php artisan plugin:grant asset-register --account=1
 ```
 
-The demo command creates account-scoped data for database verification:
+Run plugin feature tests from the HKSpace core so the core test bootstrap,
+database isolation guard and plugin test suite are used:
+
+The Asset feature suite keeps all asset-related tests under
+`tests/Feature/Asset`. The current suite covers permissions/navigation and the
+development fixture.
 
 ```bash
-php artisan asset-register:demo-data 1 --reset
+cd /path/to/hk-space-be
+php artisan test --testsuite=Plugins --filter=AssetPermissionTest
+php artisan test --testsuite=Plugins --filter=AssetDevelopmentSeederTest
 ```
 
-It is disabled in production and never deletes data belonging to another
-account. The demo account must contain the active fixture members used by the
-sample data (`ha`, `khoa`, `bao`, `an`, `tam` and `huy` at
-`@sotaisan.test`); records are not assigned to users outside that account or
-to suspended members.
+The development fixture asserts exactly **9 asset types, 5 locations and 18
+assets** for its account. The core test database is derived from the core
+`.env` `DB_DATABASE` plus `_testing`; do not point tests at a development or
+production database.
 
-## Local and test fixtures
+Playwright is configured to use `ASSET_REGISTER_BASE_URL`. Start an isolated
+HKSpace test instance with a seeded test account, then run:
 
-In `local` and `testing`, the plugin contributes
-`AssetRegisterDevelopmentSeeder` through `AssetRegisterModule::developmentSeeders()`.
-The core `DatabaseSeeder` and PHPUnit `RefreshDatabase` flow use it to create
-the isolated `Asset Register Test Workspace`, grant the plugin, add the six
-active demo members, and reset/rebuild the sample catalogs, assets and handovers.
-The seed is skipped outside local/testing and does not include the core's large
-task dataset.
+```bash
+cd /path/to/asset-register
+npm install
+npx playwright install chromium
+ASSET_REGISTER_BASE_URL=http://localhost:8000 npm run test:e2e
+```
 
-The test database name is derived from the core `.env` `DB_DATABASE` plus
-`_testing`; do not hard-code it in `phpunit.xml`. Run tests through the core's
-standard test command so its isolation guard selects the correct database.
+There are currently no Playwright spec files under `tests/E2E`; the command
+will have no plugin scenarios to run until E2E cases are added. Never point
+E2E tests at production.
 
-## Development checklist
+## Business limits and known gaps
 
-- [x] Composer package, manifest and provider use the Asset Register identity.
-- [x] Five models and five owned database tables are defined.
-- [x] Account-scoped permissions and role catalog provider are defined.
-- [x] Grant, revoke, uninstall and purge lifecycle handlers are present.
-- [x] Vietnamese and English package translation directories are present.
-- [x] Demo data command is available for local database verification.
-- [x] A repeatable local/testing fixture creates a granted Asset Register
-  workspace and seeds the plugin's demo catalogs, assets and handovers.
-- [x] Legacy Hello and Equipment starter code has been removed.
-- [x] UC-001 access/navigation and UC-002/UC-003 catalog web screens and
-  account-scoped mutations are implemented.
-- [x] UC-004 registry search, filters, sorting and pagination use account data.
-- [x] UC-005 create and UC-006 detail / UC-007 edit use live account data,
-  with code sequencing and immutable history.
-- [x] Feature tests cover permission gating, catalog behavior, uniqueness,
-  reference constraints and demo fixture integrity.
-- [x] Focused MySQL feature tests cover live registry, asset creation, detail,
-  edits, access control and account isolation.
+### Catalogs
+
+- All catalog records are scoped to the current account.
+- Type name: required, up to 100 characters. Prefix: required, 2–6 uppercase
+  ASCII letters/digits; it is normalized to uppercase.
+- Location name: required, up to 150 characters.
+- Type icon and type/location descriptions are optional, up to 50 and 500
+  characters respectively.
+- Type names, type prefixes and location names are unique per account;
+  comparisons ignore case and distinguish accents.
+- A type prefix cannot be changed after the type is used by an asset. A type
+  or location referenced by an asset cannot be deleted; it can be disabled.
+
+### Asset records
+
+- Asset codes are account-unique, 2–30 characters, normalized to uppercase,
+  and limited to ASCII letters, digits and hyphens. Generated codes use the
+  type prefix and per-type sequence.
+- Name is required (1–150 characters); brand, model and serial are up to 100
+  characters; configuration and note are up to 2,000; supplier is up to 150;
+  receipt number is up to 100.
+- Condition is one of `new`, `good`, `fair` or `poor`. Warranty end date cannot
+  precede purchase date. New records require an active type and, if selected,
+  an active location.
+- Account scoping is enforced on reads and writes. A disabled current catalog
+  value may be retained while editing, but a different disabled value cannot
+  be selected.
+
+### Release scope
+
+- The “Của tôi” page is currently a static development preview; self-service
+  actions are not implemented.
+- Handover actions, status transitions and disposal actions are not
+  implemented. A disposed record, if present, is read-only.
+- The plugin exposes web routes only; no public plugin API, import/export,
+  file upload, notifications, queue processing or realtime updates are
+  provided.
+- `ASSET_REGISTER_ENABLED` and `ASSET_REGISTER_DEMO_COMMAND_ALLOWED` are
+  present in config but are not wired to runtime behavior; plugin activation
+  and access must be controlled through the core plugin registry and account
+  grants.
