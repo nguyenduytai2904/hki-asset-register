@@ -1,0 +1,37 @@
+{
+    "name": "hki/asset-register",
+    "description": "HKSpace asset register plugin.",
+    "type": "library",
+    "license": "proprietary",
+    "require": {
+        "composer-runtime-api": "^2.0",
+        "php": "^8.2",
+        "hki/hkspace-plugin-api": "^1.2",
+        "laravel/framework": "^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Hki\\AssetRegister\\": "src/",
+            "Hki\\AssetRegister\\Database\\Factories\\": "database/factories/",
+            "Hki\\AssetRegister\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Hki\\AssetRegister\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Hki\\AssetRegister\\AssetRegisterServiceProvider"
+            ]
+        },
+        "hkspace": {
+            "plugin": "asset-register",
+            "tested-with": "hkspace-core-dev"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
