@@ -146,6 +146,25 @@ assets** for its account. The core test database is derived from the core
 `.env` `DB_DATABASE` plus `_testing`; do not point tests at a development or
 production database.
 
+## UC-004 to UC-007: Asset register operations
+
+The `feature/asset-register-uc4-uc7` review branch adds the live,
+account-scoped registry and asset-record workflows:
+
+- UC-004: search, multi-value status/type/location/warranty filters, sorting,
+  pagination, empty states and former-member keeper labels.
+- UC-005: create an asset with a generated or manually entered account-unique
+  code, an initial history record, purchase/warranty details and catalog
+  validation. Generated codes use a per-type sequence and skip occupied codes.
+- UC-006: view account-scoped asset details and history. A keeper without
+  register access is limited to their own detail view and related history.
+- UC-007: edit asset metadata without changing its code, preserve unchanged
+  disabled catalog selections, and record field changes in history.
+
+Asset-record routes require the relevant account permission and an active
+plugin grant. Disposed records are read-only; lifecycle actions such as
+handover, status transition and disposal are outside UC-004 to UC-007.
+
 Playwright is configured to use `ASSET_REGISTER_BASE_URL`. Start an isolated
 HKSpace test instance with a seeded test account, then run:
 
