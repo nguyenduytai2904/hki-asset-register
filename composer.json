@@ -2,7 +2,7 @@
     "name": "hki/asset-register",
     "description": "HKSpace asset register plugin.",
     "type": "library",
-    "license": "MIT",
+    "license": "proprietary",
     "require": {
         "composer-runtime-api": "^2.0",
         "php": "^8.2",

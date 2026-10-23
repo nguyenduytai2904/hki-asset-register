@@ -5,25 +5,22 @@ declare(strict_types=1);
 namespace Hki\AssetRegister;
 
 use App\Support\Plugin\BaseModule;
-use App\Support\Plugin\DTOs\SidebarConfig;
 use App\Support\Plugin\DTOs\DefaultRoleConfig;
+use App\Support\Plugin\DTOs\SidebarConfig;
 use Composer\InstalledVersions;
 use Hki\AssetRegister\Lifecycle\AssetRegisterAccountGrant;
 use Hki\AssetRegister\Lifecycle\AssetRegisterAccountRevoke;
 use Hki\AssetRegister\Lifecycle\AssetRegisterInstaller;
 use Hki\AssetRegister\Lifecycle\AssetRegisterPurger;
 use Hki\AssetRegister\Lifecycle\AssetRegisterUninstaller;
+use Hki\AssetRegister\Rbac\AssetRegisterPermissions;
+use Hki\AssetRegister\Support\Schema\AssetRegisterSchema;
 
 final class AssetRegisterModule extends BaseModule
 {
     public const CODE = 'asset-register';
-    public const TABLES = [
-        'asset_types',
-        'asset_locations',
-        'assets',
-        'asset_handovers',
-        'asset_histories',
-    ];
+
+    public const TABLES = AssetRegisterSchema::TABLE_ORDER;
 
     public function code(): string
     {
@@ -32,7 +29,7 @@ final class AssetRegisterModule extends BaseModule
 
     public function name(): array
     {
-        return ['vi' => 'Sổ tài sản', 'en' => 'Asset Register'];
+        return ['vi' => 'Tài sản', 'en' => 'Assets'];
     }
 
     public function version(): string
@@ -49,7 +46,7 @@ final class AssetRegisterModule extends BaseModule
 
     public function icon(): string
     {
-        return 'extension';
+        return 'inventory_2';
     }
 
     public function author(): array
@@ -77,16 +74,18 @@ final class AssetRegisterModule extends BaseModule
 
     public function ownsPermissions(): array
     {
-        return [
-            'asset-register.self.use',
-            'asset-register.assets.view',
-            'asset-register.assets.manage',
-        ];
+        return AssetRegisterPermissions::all();
     }
 
     public function sidebar(): ?SidebarConfig
     {
-        return null;
+        return new SidebarConfig(
+            slot: 'main',
+            order: 80,
+            icon: $this->icon(),
+            routeName: 'asset-register.index',
+            labelKey: 'asset-register::asset-register.name',
+        );
     }
 
     public function installerClass(): string
@@ -120,16 +119,9 @@ final class AssetRegisterModule extends BaseModule
             new DefaultRoleConfig(
                 code: 'asset-register.asset_manager',
                 name: ['vi' => 'Quản lý sổ tài sản', 'en' => 'Asset Register Manager'],
-                permissions: self::PERMISSIONS,
+                permissions: AssetRegisterPermissions::all(),
                 isDefaultForAccountOwner: true,
             ),
         ];
     }
-
-    /** @var list<string> */
-    public const PERMISSIONS = [
-        'asset-register.self.use',
-        'asset-register.assets.view',
-        'asset-register.assets.manage',
-    ];
 }
