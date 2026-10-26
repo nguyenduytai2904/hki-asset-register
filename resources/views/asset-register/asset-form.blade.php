@@ -3,7 +3,7 @@
 @section('title', $asset ? __('asset-register::asset-register.asset_form.edit_title') : __('asset-register::asset-register.asset_form.create_title'))
 
 @section('content')
-<main class="ar-page">
+<main class="ar-page" x-data="window.HK.assetRegister.assetFormPage()">
     <nav class="ar-tabs" aria-label="{{ __('asset-register::asset-register.name') }}">
         @foreach ($tabs as $tab)
             <a href="{{ $tab['url'] }}" @class(['ar-tab', 'is-active' => $activeTab === $tab['key']])>
@@ -43,7 +43,7 @@
                 </label>
                 <label>{{ __('asset-register::asset-register.asset_form.code') }}@if ($asset)<input value="{{ $asset->code }}" readonly>@else<input name="code" maxlength="30" value="{{ old('code') }}" placeholder="{{ __('asset-register::asset-register.asset_form.auto_code') }}">@endif
                     @if (! $asset)
-                        <small class="ar-form-hint">{{ __('asset-register::asset-register.asset_form.next_code') }} <output id="ar-next-code">--</output></small>
+                        <small class="ar-form-hint">{{ __('asset-register::asset-register.asset_form.next_code') }} <output id="ar-next-code" data-empty-value="--">--</output></small>
                     @endif
                     @error('code')<small class="ar-field-error">{{ $message }}</small>@enderror
                 </label>
@@ -74,15 +74,15 @@
         <section class="ar-form-section">
             <h2>{{ __('asset-register::asset-register.asset_form.purchase_warranty') }}</h2>
             <div class="ar-form-grid">
-                <label>{{ __('asset-register::asset-register.asset_form.purchase_date') }}<input type="date" name="purchase_date" value="{{ old('purchase_date', $asset?->purchase_date?->format('Y-m-d')) }}">@error('purchase_date')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
-                <label>{{ __('asset-register::asset-register.asset_form.warranty_end_date') }}<input type="date" name="warranty_end_date" value="{{ old('warranty_end_date', $asset?->warranty_end_date?->format('Y-m-d')) }}">@error('warranty_end_date')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                <label>{{ __('asset-register::asset-register.asset_form.purchase_date') }}<input type="date" name="purchase_date" data-hk-datepicker="date" value="{{ old('purchase_date', $asset?->purchase_date?->format('Y-m-d')) }}">@error('purchase_date')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                <label>{{ __('asset-register::asset-register.asset_form.warranty_end_date') }}<input type="date" name="warranty_end_date" data-hk-datepicker="date" value="{{ old('warranty_end_date', $asset?->warranty_end_date?->format('Y-m-d')) }}">@error('warranty_end_date')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                 <label>{{ __('asset-register::asset-register.asset_form.supplier') }}<input name="supplier" maxlength="150" value="{{ old('supplier', $asset?->supplier) }}">@error('supplier')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                 <label>{{ __('asset-register::asset-register.asset_form.receipt_number') }}<input name="receipt_number" maxlength="100" value="{{ old('receipt_number', $asset?->receipt_number) }}">@error('receipt_number')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
             </div>
         </section>
         <section class="ar-form-section">
             <h2>{{ __('asset-register::asset-register.asset_form.additional') }}</h2>
-            <label>{{ __('asset-register::asset-register.asset_form.note') }}<textarea name="note" maxlength="2000" rows="3">{{ old('note', $asset?->note) }}</textarea>@error('note')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+            <label>{{ __('asset-register::asset-register.asset_form.note') }}<textarea name="note" maxlength="2000" rows="3">{{ old('note', $asset?->note) }}</textarea><small class="ar-form-hint">{{ __('asset-register::asset-register.actions.no_personal_data') }}</small>@error('note')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
         </section>
         <footer class="ar-form-footer">
             <a class="ar-button" href="{{ $asset ? route('asset-register.assets.show', $asset->id) : route('asset-register.registry') }}">{{ __('asset-register::asset-register.asset_form.cancel') }}</a>
@@ -91,17 +91,5 @@
     </form>
 </main>
 @if (! $asset)
-    <script>
-        (() => {
-            const typeSelect = document.getElementById('ar-asset-type');
-            const preview = document.getElementById('ar-next-code');
-            const updatePreview = () => {
-                preview.textContent = typeSelect.selectedOptions[0]?.dataset.nextCode || '--';
-            };
-            typeSelect.addEventListener('change', updatePreview);
-            updatePreview();
-        })();
-    </script>
 @endif
-@include('asset-register::asset-register.styles')
 @endsection

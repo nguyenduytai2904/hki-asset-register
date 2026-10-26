@@ -6,6 +6,14 @@
 @php
     $pendingHandover = $asset->handovers->first(fn ($handover) => $handover->status === 'pending' && $handover->closed_at === null);
     $statusKey = $pendingHandover ? 'pending' : ($asset->status === 'pending_confirmation' ? 'pending' : $asset->status);
+    $statusOptions = match ($asset->status) {
+        'available', 'in_use' => ['in_repair', 'broken', 'lost'],
+        'in_repair' => ['available', 'broken'],
+        'broken' => ['available', 'in_repair'],
+        'lost' => ['available'],
+        default => [],
+    };
+    $pendingHandoverHistory = $pendingHandover ? $asset->histories->first(fn ($history) => $history->action === 'handed_over') : null;
 @endphp
 <main class="ar-page ar-detail-page">
     <nav class="ar-tabs" aria-label="{{ __('asset-register::asset-register.name') }}">
@@ -36,8 +44,27 @@
         </div>
         <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
         <div class="ar-detail-actions">
-            @if ($canManage)
+            @if ($canManage && $asset->status !== 'disposed')
                 <a class="ar-button" href="{{ route('asset-register.assets.edit', $asset->id) }}"><span class="material-symbols-rounded" aria-hidden="true">edit</span>{{ __('asset-register::asset-register.asset_detail.edit') }}</a>
+                @if ($asset->status === 'available')
+                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="handover" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-action-title="{{ __('asset-register::asset-register.actions.handover_title') }}"><span class="material-symbols-rounded" aria-hidden="true">assignment_ind</span>{{ __('asset-register::asset-register.actions.handover') }}</button>
+                @elseif ($asset->status === 'in_use')
+                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="handover" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-action-title="{{ __('asset-register::asset-register.actions.transfer_title') }}" data-current-keeper="{{ $asset->keeper?->name }}"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span>{{ __('asset-register::asset-register.actions.transfer') }}</button>
+                    <button class="ar-button" type="button" data-ar-open-action-dialog="return" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-recipient="{{ $asset->keeper?->name }}" data-pending="{{ $pendingHandover ? 'true' : 'false' }}">{{ __('asset-register::asset-register.actions.return') }}</button>
+                @endif
+                @if ($statusOptions !== [])
+                    <button class="ar-button" type="button" data-ar-open-action-dialog="status" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-status-options="{{ implode(',', $statusOptions) }}" data-status-label="{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}" data-status-class="{{ $statusKey === 'pending' ? 'is-pending' : (in_array($statusKey, ['in_repair'], true) ? 'is-warning' : (in_array($statusKey, ['broken', 'lost'], true) ? 'is-danger' : '')) }}">{{ __('asset-register::asset-register.actions.change_status') }}</button>
+                @endif
+                @if ($asset->status === 'in_use')
+                    <button class="ar-button ar-button-danger" type="button" disabled title="{{ __('asset-register::asset-register.actions.return_before_disposal') }}">{{ __('asset-register::asset-register.actions.dispose') }}</button>
+                @elseif ($asset->status !== 'disposed')
+                    <button class="ar-button ar-button-danger" type="button" data-ar-open-action-dialog="dispose" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-purchase-date="{{ $asset->purchase_date?->format('Y-m-d') }}">{{ __('asset-register::asset-register.actions.dispose') }}</button>
+                @endif
+            @elseif ($isKeeperView && $asset->status !== 'disposed')
+                @if ($pendingHandover)
+                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="confirm" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-condition="{{ $pendingHandover->condition_on_handover ? __('asset-register::asset-register.condition.' . $pendingHandover->condition_on_handover) : '—' }}" data-assigned-by="{{ $pendingHandoverHistory?->user?->name }}" data-assigned-at="{{ $pendingHandover->handed_over_at?->format('d/m/Y H:i') }}">{{ __('asset-register::asset-register.mine.confirm_received') }}</button>
+                @endif
+                <button class="ar-button" type="button" data-ar-open-action-dialog="issue" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" @if ($pendingHandover) data-issue-type="incorrect" @endif>{{ $pendingHandover ? __('asset-register::asset-register.mine.report_incorrect') : __('asset-register::asset-register.mine.report_issue') }}</button>
             @endif
         </div>
     </header>
@@ -76,10 +103,14 @@
                     <div>
                         <dt>{{ __('asset-register::asset-register.asset_form.warranty_end_date') }}</dt>
                         <dd>{{ $asset->warranty_end_date?->format('d/m/Y') ?? '--' }}
-                            @if ($asset->warranty_end_date && $asset->warranty_end_date->lt(today()))
-                                <small class="ar-warranty-expired">{{ __('asset-register::asset-register.registry.expired') }}</small>
-                            @elseif ($asset->warranty_end_date && $asset->warranty_end_date->lte(today()->addDays(30)))
-                                <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => today()->diffInDays($asset->warranty_end_date)]) }}</small>
+                            @if ($asset->status !== 'disposed' && $asset->warranty_end_date)
+                                @if ($asset->warranty_end_date->lt($warrantyToday))
+                                    <small class="ar-warranty-expired">{{ __('asset-register::asset-register.registry.expired') }}</small>
+                                @elseif ($asset->warranty_end_date->isSameDay($warrantyToday))
+                                    <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.warranty_today') }}</small>
+                                @elseif ($asset->warranty_end_date->lte($warrantyToday->copy()->addDays(30)))
+                                    <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => $warrantyToday->diffInDays($asset->warranty_end_date)]) }}</small>
+                                @endif
                             @endif
                         </dd>
                     </div>
@@ -162,5 +193,5 @@
         </aside>
     </div>
 </main>
-@include('asset-register::asset-register.styles')
+@include('asset-register::asset-register.action-dialogs')
 @endsection
