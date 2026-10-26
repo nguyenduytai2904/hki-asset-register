@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Hki\AssetRegister\Asset\Models;
 
+use App\Support\Account\Concerns\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class AssetType extends Model
 {
+    use BelongsToAccount;
+
     private const DISPLAY_ICONS = [
         'category',
         'computer',
@@ -25,7 +28,13 @@ final class AssetType extends Model
         'tablet_mac',
     ];
 
-    protected $table = 'asset_types';
+    /** @return list<string> */
+    public static function availableIcons(): array
+    {
+        return self::DISPLAY_ICONS;
+    }
+
+    protected $table = 'asset_register_types';
 
     protected $fillable = ['account_id', 'name', 'prefix', 'icon', 'status', 'description'];
 

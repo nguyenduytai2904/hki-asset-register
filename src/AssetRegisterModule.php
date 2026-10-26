@@ -5,27 +5,23 @@ declare(strict_types=1);
 namespace Hki\AssetRegister;
 
 use App\Support\Plugin\BaseModule;
-use App\Support\Plugin\DTOs\SidebarConfig;
 use App\Support\Plugin\DTOs\DefaultRoleConfig;
+use App\Support\Plugin\DTOs\SidebarConfig;
 use Composer\InstalledVersions;
+use Hki\AssetRegister\Database\Seeders\AssetRegisterDevelopmentSeeder;
 use Hki\AssetRegister\Lifecycle\AssetRegisterAccountGrant;
 use Hki\AssetRegister\Lifecycle\AssetRegisterAccountRevoke;
 use Hki\AssetRegister\Lifecycle\AssetRegisterInstaller;
 use Hki\AssetRegister\Lifecycle\AssetRegisterPurger;
 use Hki\AssetRegister\Lifecycle\AssetRegisterUninstaller;
 use Hki\AssetRegister\Rbac\AssetRegisterPermissions;
-use Hki\AssetRegister\Database\Seeders\AssetRegisterDevelopmentSeeder;
+use Hki\AssetRegister\Support\Schema\AssetRegisterSchema;
 
 final class AssetRegisterModule extends BaseModule
 {
     public const CODE = 'asset-register';
-    public const TABLES = [
-        'asset_types',
-        'asset_locations',
-        'assets',
-        'asset_handovers',
-        'asset_histories',
-    ];
+
+    public const TABLES = AssetRegisterSchema::TABLE_ORDER;
 
     public function code(): string
     {

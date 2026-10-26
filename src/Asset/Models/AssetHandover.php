@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace Hki\AssetRegister\Asset\Models;
 
 use App\Models\User;
+use App\Support\Account\Concerns\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class AssetHandover extends Model
 {
-    protected $table = 'asset_handovers';
+    use BelongsToAccount;
+
+    protected $table = 'asset_register_handovers';
 
     protected $fillable = [
-        'asset_id', 'recipient_id', 'status', 'condition_on_handover',
+        'account_id', 'asset_id', 'recipient_id', 'status', 'condition_on_handover',
         'condition_on_return', 'note', 'handed_over_at', 'confirmed_at', 'closed_at',
     ];
 

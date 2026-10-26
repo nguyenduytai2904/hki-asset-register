@@ -5,13 +5,18 @@ declare(strict_types=1);
 namespace Hki\AssetRegister\Asset\Models;
 
 use App\Models\User;
+use App\Support\Account\Concerns\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class Asset extends Model
 {
-    protected $table = 'assets';
+    use BelongsToAccount;
+
+    public const NOTIFICATION_SUBJECT_TYPE = 'asset_register_asset';
+
+    protected $table = 'asset_register_assets';
 
     protected $fillable = [
         'account_id', 'asset_type_id', 'asset_location_id', 'code', 'name',

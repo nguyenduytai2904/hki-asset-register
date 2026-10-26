@@ -7,7 +7,6 @@ namespace Hki\AssetRegister\Rbac;
 use App\Contracts\Rbac\AccountPermissionProviderContract;
 use App\Support\Rbac\PluginPermissionDef;
 use Hki\AssetRegister\AssetRegisterModule;
-use Hki\AssetRegister\Rbac\AssetRegisterPermissions;
 
 /**
  * Permission catalog của plugin Asset Register.
@@ -19,7 +18,7 @@ final class AssetRegisterPermissionProvider implements AccountPermissionProvider
 {
     public function providerKey(): string
     {
-        return AssetRegisterModule::CODE . '.assets';
+        return AssetRegisterModule::CODE.'.assets';
     }
 
     public function ownerPluginCode(): string
@@ -29,7 +28,7 @@ final class AssetRegisterPermissionProvider implements AccountPermissionProvider
 
     public function groupLabel(): string
     {
-        return 'Tài sản';
+        return __('asset-register::asset-register.permissions.group');
     }
 
     public function permissions(): array
@@ -37,20 +36,20 @@ final class AssetRegisterPermissionProvider implements AccountPermissionProvider
         return [
             new PluginPermissionDef(
                 key: AssetRegisterPermissions::SELF_USE,
-                label: 'Tự phục vụ',
-                description: 'Sử dụng tài sản được cấp cho chính mình.',
+                label: __('asset-register::asset-register.permissions.self_use.label'),
+                description: __('asset-register::asset-register.permissions.self_use.description'),
                 icon: 'person',
             ),
             new PluginPermissionDef(
                 key: AssetRegisterPermissions::ASSETS_VIEW,
-                label: 'Xem sổ tài sản',
-                description: 'Xem danh sách tài sản thiết bị của account.',
+                label: __('asset-register::asset-register.permissions.assets_view.label'),
+                description: __('asset-register::asset-register.permissions.assets_view.description'),
                 icon: 'visibility',
             ),
             new PluginPermissionDef(
                 key: AssetRegisterPermissions::ASSETS_MANAGE,
-                label: 'Quản lý sổ tài sản',
-                description: 'Tạo, cập nhật và xóa tài sản trong account.',
+                label: __('asset-register::asset-register.permissions.assets_manage.label'),
+                description: __('asset-register::asset-register.permissions.assets_manage.description'),
                 icon: 'inventory',
             ),
         ];
