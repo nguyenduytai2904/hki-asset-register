@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Hki\AssetRegister\Tests\Feature\Asset\Concerns;
+namespace Hki\AssetRegister\Tests\Support;
 
 use App\Models\Account;
 use App\Models\AccountPlugin;
@@ -53,5 +53,4 @@ trait InteractsWithAssetRegister
 
         app(PluginRegistry::class)->flushAccountCache((int) $account->id);
     }
-
 }
