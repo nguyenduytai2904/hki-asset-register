@@ -69,6 +69,11 @@ The development/test fixture is
 members, and invokes the demo-data command. It is skipped outside `local` and
 `testing`.
 
+Plugin-owned tables use the `asset_register_` prefix and are declared in
+`AssetRegisterSchema`. Both migrations and the plugin installer use this schema
+owner. A compatibility migration renames earlier unprefixed development tables
+and adds account ownership to existing handover and history records.
+
 ## System dependencies
 
 | Dependency | Minimum | Use |
