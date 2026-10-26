@@ -9,7 +9,7 @@ use Hki\AssetRegister\Asset\DTOs\AssetLocationData;
 final class AssetLocationDataFactory
 {
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public function fromArray(array $data): AssetLocationData
     {

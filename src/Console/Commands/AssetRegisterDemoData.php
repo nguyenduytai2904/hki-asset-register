@@ -2,13 +2,16 @@
 
 namespace Hki\AssetRegister\Console\Commands;
 
+use App\Models\Account;
+use App\Models\AccountUser;
+use App\Support\Timezone\TimezoneContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 final class AssetRegisterDemoData extends Command
 {
     protected $signature = 'asset-register:demo-data {accountId} {--reset : Xoá dữ liệu Sổ tài sản của riêng tài khoản trước khi dựng}';
+
     protected $description = 'Dựng dữ liệu mẫu cho plugin Sổ tài sản phiên bản v0.1.0 theo mục 9.3';
 
     public function handle()
@@ -16,32 +19,35 @@ final class AssetRegisterDemoData extends Command
         // 1. Từ chối chạy khi APP_ENV=production
         if (app()->environment('production')) {
             $this->error('Lệnh này bị từ chối chạy trong môi trường production!');
+
             return 1;
         }
 
         $accountId = $this->argument('accountId');
-        if (! ctype_digit((string) $accountId) || ! DB::table('accounts')->where('id', (int) $accountId)->exists()) {
+        if (! ctype_digit((string) $accountId) || ! Account::query()->whereKey((int) $accountId)->exists()) {
             $this->error("Account không tồn tại: {$accountId}");
+
             return self::FAILURE;
         }
         $accountId = (int) $accountId;
-        $today = Carbon::today();
+        $today = TimezoneContext::now()->startOfDay();
         $requiredDemoMembers = ['ha', 'khoa', 'bao', 'an', 'tam', 'huy'];
-        $activeDemoMembers = DB::table('users as u')
-            ->join('account_user as au', 'au.user_id', '=', 'u.id')
-            ->where('au.account_id', $accountId)
-            ->whereNull('au.suspended_at')
-            ->whereNull('u.deleted_at')
-            ->whereNull('u.banned_at')
-            ->whereIn('u.email', array_map(static fn (string $key): string => "{$key}@sotaisan.test", $requiredDemoMembers))
-            ->pluck('u.email')
+        $requiredDemoEmails = array_map(static fn (string $key): string => "{$key}@sotaisan.test", $requiredDemoMembers);
+        $activeDemoMembers = AccountUser::query()
+            ->with('user')
+            ->where('account_id', $accountId)
+            ->whereNull('suspended_at')
+            ->whereHas('user', fn ($user) => $user->whereIn('email', $requiredDemoEmails)->whereNull('banned_at'))
+            ->get()
+            ->pluck('user.email')
             ->all();
         $missingDemoMembers = array_diff(
-            array_map(static fn (string $key): string => "{$key}@sotaisan.test", $requiredDemoMembers),
+            $requiredDemoEmails,
             $activeDemoMembers,
         );
         if ($missingDemoMembers !== []) {
-            $this->error('Thiếu thành viên đang hoạt động trong tài khoản: ' . implode(', ', $missingDemoMembers));
+            $this->error('Thiếu thành viên đang hoạt động trong tài khoản: '.implode(', ', $missingDemoMembers));
+
             return self::FAILURE;
         }
 
@@ -55,17 +61,11 @@ final class AssetRegisterDemoData extends Command
 
                 // Xoá lịch sử, giao nhận, tài sản, loại, nơi đặt của riêng tài khoản này
                 // (Giả định các bảng có cột account_id hoặc liên kết qua asset/type/location)
-                DB::table('asset_histories')->whereIn('asset_id', function ($query) use ($accountId) {
-                    $query->select('id')->from('assets')->where('account_id', $accountId);
-                })->delete();
-
-                DB::table('asset_handovers')->whereIn('asset_id', function ($query) use ($accountId) {
-                    $query->select('id')->from('assets')->where('account_id', $accountId);
-                })->delete();
-
-                DB::table('assets')->where('account_id', $accountId)->delete();
-                DB::table('asset_types')->where('account_id', $accountId)->delete();
-                DB::table('asset_locations')->where('account_id', $accountId)->delete();
+                DB::table('asset_register_histories')->where('account_id', $accountId)->delete();
+                DB::table('asset_register_handovers')->where('account_id', $accountId)->delete();
+                DB::table('asset_register_assets')->where('account_id', $accountId)->delete();
+                DB::table('asset_register_types')->where('account_id', $accountId)->delete();
+                DB::table('asset_register_locations')->where('account_id', $accountId)->delete();
             }
 
             // 3. Dựng 9 Loại tài sản
@@ -84,7 +84,7 @@ final class AssetRegisterDemoData extends Command
 
             $typeIds = [];
             foreach ($types as $t) {
-                $typeIds[$t['prefix']] = DB::table('asset_types')->insertGetId([
+                $typeIds[$t['prefix']] = DB::table('asset_register_types')->insertGetId([
                     'account_id' => $accountId,
                     'name' => $t['name'],
                     'prefix' => $t['prefix'],
@@ -107,7 +107,7 @@ final class AssetRegisterDemoData extends Command
 
             $locationIds = [];
             foreach ($locations as $l) {
-                $locationIds[$l['name']] = DB::table('asset_locations')->insertGetId([
+                $locationIds[$l['name']] = DB::table('asset_register_locations')->insertGetId([
                     'account_id' => $accountId,
                     'name' => $l['name'],
                     'description' => $l['description'],
@@ -119,15 +119,15 @@ final class AssetRegisterDemoData extends Command
 
             // Hàm phụ trợ lấy user_id từ email dạng <key>@sotaisan.test
             $getUserId = function ($key) use ($accountId) {
-                if (!$key) return null;
-                return DB::table('users')
-                    ->join('account_user', 'account_user.user_id', '=', 'users.id')
-                    ->where('email', "{$key}@sotaisan.test")
-                    ->where('account_user.account_id', $accountId)
-                    ->whereNull('account_user.suspended_at')
-                    ->whereNull('users.deleted_at')
-                    ->whereNull('users.banned_at')
-                    ->value('users.id');
+                if (! $key) {
+                    return null;
+                }
+
+                return AccountUser::query()
+                    ->where('account_id', $accountId)
+                    ->whereNull('suspended_at')
+                    ->whereHas('user', fn ($user) => $user->where('email', "{$key}@sotaisan.test")->whereNull('banned_at'))
+                    ->value('user_id');
             };
 
             // 5. Dựng 18 Tài sản mẫu theo mục 9.3
@@ -144,7 +144,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Apple',
                     'model' => 'iPhone 13',
                     'serial' => 'F17GQ2XYN735',
-                    'condition' => 'fair'
+                    'condition' => 'fair',
                 ],
                 [
                     'code' => 'DT-0002',
@@ -157,7 +157,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Samsung',
                     'model' => 'Galaxy A54',
                     'serial' => 'R58W40AB12K',
-                    'condition' => 'poor'
+                    'condition' => 'poor',
                 ],
                 [
                     'code' => 'DT-0003',
@@ -170,7 +170,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Xiaomi',
                     'model' => 'Redmi Note 13',
                     'serial' => '23129RAA4G01',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'LT-0001',
@@ -183,7 +183,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Dell',
                     'model' => 'Latitude 5440',
                     'serial' => '7XK2Q83',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'LT-0002',
@@ -196,7 +196,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Dell',
                     'model' => 'Latitude 5440',
                     'serial' => '7XK2Q91',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'LT-0003',
@@ -223,7 +223,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'HP',
                     'model' => 'ProBook 440 G5',
                     'serial' => '5CD8231JQK',
-                    'condition' => 'poor'
+                    'condition' => 'poor',
                 ],
                 [
                     'code' => 'MB-0001',
@@ -236,7 +236,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Apple',
                     'model' => 'iPad Air (5th gen)',
                     'serial' => 'DMPGQ7Z1Q16M',
-                    'condition' => 'poor'
+                    'condition' => 'poor',
                 ],
                 [
                     'code' => 'MB-0002',
@@ -263,7 +263,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Dell',
                     'model' => 'P2422H',
                     'serial' => 'CN0K9P1D',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'MH-0002',
@@ -276,7 +276,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Dell',
                     'model' => 'P2422H',
                     'serial' => 'CN0K9P7F',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'MH-0003',
@@ -289,7 +289,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'LG',
                     'model' => '24MP400',
                     'serial' => '403NTAB1C2',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'PC-0001',
@@ -302,7 +302,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Apple',
                     'model' => 'Mac mini (M2, 2023)',
                     'serial' => 'H4VXR2LQ0Y',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'PK-0001',
@@ -315,7 +315,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Logitech',
                     'model' => 'MX Keys',
                     'serial' => '2128LZ0A9F8',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'PK-0002',
@@ -328,7 +328,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Logitech',
                     'model' => 'MX Master 3S',
                     'serial' => '2231LZ5K0P2',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'PK-0003',
@@ -341,7 +341,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Jabra',
                     'model' => 'Evolve2 65',
                     'serial' => '26599-989-899',
-                    'condition' => 'new'
+                    'condition' => 'new',
                 ],
                 [
                     'code' => 'SV-0001',
@@ -354,7 +354,7 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Dell',
                     'model' => 'PowerEdge T150',
                     'serial' => 'JX4TQ63',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
                 [
                     'code' => 'TBM-0001',
@@ -367,13 +367,13 @@ final class AssetRegisterDemoData extends Command
                     'brand' => 'Draytek',
                     'model' => 'Vigor 2927',
                     'serial' => '2927AC0193',
-                    'condition' => 'good'
+                    'condition' => 'good',
                 ],
             ];
 
             foreach ($assets as $item) {
                 $keeperId = $getUserId($item['keeper']);
-                $assetId = DB::table('assets')->insertGetId([
+                $assetId = DB::table('asset_register_assets')->insertGetId([
                     'account_id' => $accountId,
                     'asset_type_id' => $typeIds[$item['type']],
                     'asset_location_id' => $locationIds[$item['location']],
@@ -392,7 +392,8 @@ final class AssetRegisterDemoData extends Command
                 ]);
 
                 // Ghi lịch sử cơ bản (Thêm vào sổ)
-                DB::table('asset_histories')->insert([
+                DB::table('asset_register_histories')->insert([
+                    'account_id' => $accountId,
                     'asset_id' => $assetId,
                     'action' => 'added',
                     'description' => "Thêm vào sổ mã {$item['code']}",
@@ -403,7 +404,8 @@ final class AssetRegisterDemoData extends Command
                 // Nếu tài sản đang được giao hoặc chờ xác nhận, tạo bảng ghi giao nhận (handovers)
                 if ($keeperId && $item['status'] === 'in_use') {
                     $handoverStatus = $item['handover_status'] ?? 'confirmed';
-                    DB::table('asset_handovers')->insert([
+                    DB::table('asset_register_handovers')->insert([
+                        'account_id' => $accountId,
                         'asset_id' => $assetId,
                         'recipient_id' => $keeperId,
                         'status' => $handoverStatus,
@@ -417,10 +419,12 @@ final class AssetRegisterDemoData extends Command
 
             DB::commit();
             $this->info('Đã dựng thành công toàn bộ dữ liệu mẫu Sổ tài sản v0.1.0!');
+
             return 0;
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error('Lỗi khi dựng dữ liệu mẫu: ' . $e->getMessage());
+            $this->error('Lỗi khi dựng dữ liệu mẫu: '.$e->getMessage());
+
             return 1;
         }
     }

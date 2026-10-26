@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Hki\AssetRegister\Asset\Repositories;
 
+use App\Models\AccountUser;
+use App\Support\Timezone\TimezoneContext;
 use Hki\AssetRegister\Asset\Contracts\Repositories\AssetRepositoryInterface;
 use Hki\AssetRegister\Asset\DTOs\AssetData;
 use Hki\AssetRegister\Asset\DTOs\AssetLocationData;
@@ -19,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final class AssetRepository implements AssetRepositoryInterface
 {
@@ -137,7 +140,7 @@ final class AssetRepository implements AssetRepositoryInterface
     public function paginateRegistry(int $accountId, AssetRegistryFilters $filters): LengthAwarePaginator
     {
         $query = Asset::query()
-            ->where('assets.account_id', $accountId)
+            ->where('asset_register_assets.account_id', $accountId)
             ->with([
                 'type' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
                 'location' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
@@ -152,26 +155,30 @@ final class AssetRepository implements AssetRepositoryInterface
         if ($filters->search !== '') {
             $search = $filters->search;
             $query->where(function (Builder $query) use ($search): void {
-                $query->where('assets.code', 'like', '%'.$search.'%')
-                    ->orWhere('assets.name', 'like', '%'.$search.'%')
-                    ->orWhere('assets.brand', 'like', '%'.$search.'%')
-                    ->orWhere('assets.model', 'like', '%'.$search.'%')
-                    ->orWhere('assets.serial', 'like', '%'.$search.'%')
+                $query->where('asset_register_assets.code', 'like', '%'.$search.'%')
+                    ->orWhere('asset_register_assets.name', 'like', '%'.$search.'%')
+                    ->orWhere('asset_register_assets.brand', 'like', '%'.$search.'%')
+                    ->orWhere('asset_register_assets.model', 'like', '%'.$search.'%')
+                    ->orWhere('asset_register_assets.serial', 'like', '%'.$search.'%')
                     ->orWhereHas('keeper', fn (Builder $keeper) => $keeper->where('name', 'like', '%'.$search.'%'));
             });
         }
 
         $this->applyStatusFilter($query, $filters->statuses);
         if ($filters->typeIds !== []) {
-            $query->whereIn('assets.asset_type_id', $filters->typeIds);
+            $query->whereIn('asset_register_assets.asset_type_id', $filters->typeIds);
         }
         if ($filters->locationIds !== []) {
-            $query->whereIn('assets.asset_location_id', $filters->locationIds);
+            $query->whereIn('asset_register_assets.asset_location_id', $filters->locationIds);
         }
         $this->applyWarrantyFilter($query, $filters->warranties);
         $this->applySorting($query, $filters->sort, $filters->direction);
 
-        return $query->paginate($filters->perPage)->withQueryString();
+        $total = (clone $query)->count();
+        $lastPage = max(1, (int) ceil($total / $filters->perPage));
+        $page = min($filters->page, $lastPage);
+
+        return $query->paginate($filters->perPage, ['*'], 'page', $page)->withQueryString();
     }
 
     public function findForShow(int $accountId, int $assetId): Asset
@@ -225,6 +232,7 @@ final class AssetRepository implements AssetRepositoryInterface
             ]);
 
             AssetHistory::query()->create([
+                'account_id' => $accountId,
                 'asset_id' => $asset->id,
                 'user_id' => $userId,
                 'action' => 'added',
@@ -238,7 +246,21 @@ final class AssetRepository implements AssetRepositoryInterface
     public function updateWithHistory(int $accountId, int $userId, int $assetId, AssetData $data): Asset
     {
         return DB::transaction(function () use ($accountId, $userId, $assetId, $data): Asset {
-            $asset = $this->findForEdit($accountId, $assetId);
+            $asset = Asset::query()
+                ->where('account_id', $accountId)
+                ->lockForUpdate()
+                ->findOrFail($assetId);
+
+            if ($asset->status === 'disposed') {
+                throw ValidationException::withMessages([
+                    'asset' => __('asset-register::asset-register.validation.disposed_asset'),
+                ]);
+            }
+
+            $asset->load([
+                'type' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
+                'location' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
+            ]);
             $changes = [];
 
             foreach ($data->attributes as $field => $value) {
@@ -254,10 +276,10 @@ final class AssetRepository implements AssetRepositoryInterface
                     $oldValue = $asset->location?->name;
                     $value = $value === null
                         ? null
-                        : DB::table('asset_locations')
+                        : AssetLocation::query()
                             ->where('account_id', $accountId)
-                            ->where('id', (int) $value)
-                            ->value('name');
+                            ->findOrFail((int) $value)
+                            ->name;
                 }
 
                 $changes[$field] = ['old' => $oldValue, 'new' => $value];
@@ -266,6 +288,7 @@ final class AssetRepository implements AssetRepositoryInterface
             $asset->update($data->attributes);
             if ($changes !== []) {
                 AssetHistory::query()->create([
+                    'account_id' => $accountId,
                     'asset_id' => $asset->id,
                     'user_id' => $userId,
                     'action' => 'updated',
@@ -283,25 +306,21 @@ final class AssetRepository implements AssetRepositoryInterface
             return collect();
         }
 
-        return DB::table('account_user')
-            ->join('users', 'users.id', '=', 'account_user.user_id')
-            ->where('account_user.account_id', $accountId)
-            ->whereIn('account_user.user_id', $keeperIds)
-            ->whereNull('account_user.suspended_at')
-            ->whereNull('users.deleted_at')
-            ->whereNull('users.banned_at')
-            ->pluck('account_user.user_id');
+        return AccountUser::query()
+            ->where('account_id', $accountId)
+            ->whereIn('user_id', $keeperIds)
+            ->whereNull('suspended_at')
+            ->whereHas('user', fn (Builder $user) => $user->whereNull('banned_at'))
+            ->pluck('user_id');
     }
 
     public function keeperIsActive(int $accountId, int $keeperId): bool
     {
-        return DB::table('account_user')
-            ->join('users', 'users.id', '=', 'account_user.user_id')
-            ->where('account_user.account_id', $accountId)
-            ->where('account_user.user_id', $keeperId)
-            ->whereNull('account_user.suspended_at')
-            ->whereNull('users.deleted_at')
-            ->whereNull('users.banned_at')
+        return AccountUser::query()
+            ->where('account_id', $accountId)
+            ->where('user_id', $keeperId)
+            ->whereNull('suspended_at')
+            ->whereHas('user', fn (Builder $user) => $user->whereNull('banned_at'))
             ->exists();
     }
 
@@ -332,7 +351,7 @@ final class AssetRepository implements AssetRepositoryInterface
         $regularStatuses = array_values(array_diff($statuses, ['pending']));
         $query->where(function (Builder $statusQuery) use ($statuses, $regularStatuses): void {
             if ($regularStatuses !== []) {
-                $statusQuery->whereIn('assets.status', $regularStatuses);
+                $statusQuery->whereIn('asset_register_assets.status', $regularStatuses);
             }
 
             if (in_array('pending', $statuses, true)) {
@@ -355,15 +374,19 @@ final class AssetRepository implements AssetRepositoryInterface
             return;
         }
 
-        $query->where(function (Builder $warrantyQuery) use ($warranties): void {
+        $now = TimezoneContext::now();
+        $today = $now->toDateString();
+        $expiringThrough = $now->copy()->addDays(30)->toDateString();
+        $query->where('asset_register_assets.status', '!=', 'disposed');
+        $query->where(function (Builder $warrantyQuery) use ($warranties, $today, $expiringThrough): void {
             foreach ($warranties as $index => $warranty) {
-                $applyWarranty = static function (Builder $query) use ($warranty): void {
+                $applyWarranty = static function (Builder $query) use ($warranty, $today, $expiringThrough): void {
                     if ($warranty === 'expired') {
-                        $query->whereNotNull('assets.warranty_end_date')
-                            ->whereDate('assets.warranty_end_date', '<', today());
+                        $query->whereNotNull('asset_register_assets.warranty_end_date')
+                            ->whereDate('asset_register_assets.warranty_end_date', '<', $today);
                     } else {
-                        $query->whereDate('assets.warranty_end_date', '>=', today())
-                            ->whereDate('assets.warranty_end_date', '<=', today()->addDays(30));
+                        $query->whereDate('asset_register_assets.warranty_end_date', '>', $today)
+                            ->whereDate('asset_register_assets.warranty_end_date', '<=', $expiringThrough);
                     }
                 };
 
@@ -379,7 +402,7 @@ final class AssetRepository implements AssetRepositoryInterface
     private function applySorting(Builder $query, string $sort, string $direction): void
     {
         if ($sort === 'status') {
-            $query->orderByRaw("CASE assets.status
+            $query->orderByRaw("CASE asset_register_assets.status
                 WHEN 'available' THEN 1
                 WHEN 'in_use' THEN 2
                 WHEN 'in_repair' THEN 3
@@ -387,13 +410,13 @@ final class AssetRepository implements AssetRepositoryInterface
                 WHEN 'lost' THEN 5
                 WHEN 'disposed' THEN 6
                 ELSE 7 END {$direction}")
-                ->orderBy('assets.code');
+                ->orderBy('asset_register_assets.code');
         } elseif ($sort === 'warranty') {
-            $query->orderByRaw('assets.warranty_end_date IS NULL')
-                ->orderBy('assets.warranty_end_date', $direction)
-                ->orderBy('assets.code');
+            $query->orderByRaw('asset_register_assets.warranty_end_date IS NULL')
+                ->orderBy('asset_register_assets.warranty_end_date', $direction)
+                ->orderBy('asset_register_assets.code');
         } else {
-            $query->orderBy('assets.code', $direction);
+            $query->orderBy('asset_register_assets.code', $direction);
         }
     }
 

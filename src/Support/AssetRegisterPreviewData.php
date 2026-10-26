@@ -60,6 +60,83 @@ final class AssetRegisterPreviewData
         ];
     }
 
+    public static function mineAsset(string $code): ?array
+    {
+        $data = self::mine();
+        $asset = collect($data['pending'])
+            ->merge($data['assets'])
+            ->firstWhere('code', $code);
+
+        if ($asset === null) {
+            return null;
+        }
+
+        $details = [
+            'MB-0002' => [
+                'type' => 'Máy tính bảng',
+                'brand' => 'Apple',
+                'configuration' => '64 GB, Wi-Fi',
+                'purchase_date' => '15/10/2026',
+                'supplier' => 'Cửa hàng Thiết bị di động Phú Minh',
+                'receipt_number' => 'HĐ 0011902',
+                'location' => 'Văn phòng tầng 3',
+                'keeper' => 'Trần Minh Khoa',
+                'note' => 'Dùng kiểm thử ứng dụng di động.',
+                'assigned_by' => 'Lê Thu Hà',
+                'handover_status' => 'pending',
+            ],
+            'LT-0001' => [
+                'type' => 'Laptop',
+                'brand' => 'Dell',
+                'configuration' => '16 GB RAM, 512 GB SSD',
+                'purchase_date' => '18/03/2024',
+                'supplier' => 'Cửa hàng máy tính',
+                'receipt_number' => 'HĐ 0008471',
+                'location' => 'Văn phòng tầng 3',
+                'keeper' => 'Trần Minh Khoa',
+                'note' => '',
+                'assigned_by' => 'Lê Thu Hà',
+                'handover_status' => 'confirmed',
+            ],
+            'MH-0001' => [
+                'type' => 'Màn hình',
+                'brand' => 'Dell',
+                'configuration' => '24 inch, Full HD',
+                'purchase_date' => '13/11/2023',
+                'supplier' => 'Nhà cung cấp thiết bị văn phòng',
+                'receipt_number' => 'HĐ 0006214',
+                'location' => 'Văn phòng tầng 3',
+                'keeper' => 'Trần Minh Khoa',
+                'note' => '',
+                'assigned_by' => 'Lê Thu Hà',
+                'handover_status' => 'confirmed',
+            ],
+        ];
+
+        return array_merge([
+            'type' => '',
+            'brand' => '',
+            'configuration' => '',
+            'purchase_date' => '',
+            'supplier' => '',
+            'receipt_number' => '',
+            'location' => 'Văn phòng tầng 3',
+            'keeper' => 'Trần Minh Khoa',
+            'note' => '',
+            'assigned_by' => 'Lê Thu Hà',
+            'handover_status' => 'confirmed',
+        ], $asset, $details[$code] ?? [], [
+            'condition_key' => match ($asset['condition']) {
+                'Mới' => 'new',
+                'Tốt' => 'good',
+                'Khá' => 'fair',
+                default => 'poor',
+            },
+            'status_key' => $asset['status'] === 'pending' ? 'pending' : 'in_use',
+            'assigned_at' => $asset['assigned_at'] ?? $asset['received_at'] ?? '--',
+        ]);
+    }
+
     public static function registry(): array
     {
         return [

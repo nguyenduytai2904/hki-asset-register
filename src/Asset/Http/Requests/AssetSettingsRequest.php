@@ -14,7 +14,7 @@ final class AssetSettingsRequest extends FormRequest
     {
         $user = $this->user();
 
-        return $user !== null && $user->can('manageCatalog', [Asset::class, AccountContext::getOrFail()]);
+        return $user !== null && $user->can('accessSettings', [Asset::class, AccountContext::getOrFail()]);
     }
 
     public function rules(): array

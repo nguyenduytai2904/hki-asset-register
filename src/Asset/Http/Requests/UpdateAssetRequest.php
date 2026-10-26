@@ -33,14 +33,14 @@ final class UpdateAssetRequest extends FormRequest
             'asset_type_id' => [
                 'required',
                 'integer',
-                Rule::exists('asset_types', 'id')->where(fn ($query) => $query
+                Rule::exists('asset_register_types', 'id')->where(fn ($query) => $query
                     ->where('account_id', $accountId)
                     ->where(fn ($query) => $query->where('status', 'active')->orWhere('id', $typeId))),
             ],
             'asset_location_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('asset_locations', 'id')->where(fn ($query) => $query
+                Rule::exists('asset_register_locations', 'id')->where(fn ($query) => $query
                     ->where('account_id', $accountId)
                     ->where(fn ($query) => $query->where('status', 'active')->orWhere('id', $locationId))),
             ],

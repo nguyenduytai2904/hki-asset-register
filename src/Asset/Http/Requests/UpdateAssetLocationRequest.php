@@ -30,7 +30,7 @@ final class UpdateAssetLocationRequest extends FormRequest
         $location = AssetLocation::query()->where('account_id', $accountId)->findOrFail((int) $this->route('locationId'));
 
         return [
-            'name' => ['required', 'string', 'max:150', Rule::unique('asset_locations', 'name')->where('account_id', $accountId)->ignore($location->id)],
+            'name' => ['required', 'string', 'max:150', Rule::unique('asset_register_locations', 'name')->where('account_id', $accountId)->ignore($location->id)],
             'description' => ['nullable', 'string', 'max:500'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ];

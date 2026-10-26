@@ -20,7 +20,8 @@ final class StoreAssetRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['code' => strtoupper(trim((string) $this->input('code', '')))]);
+        $code = strtoupper(trim((string) $this->input('code', '')));
+        $this->merge(['code' => $code === '' ? null : $code]);
     }
 
     public function rules(): array
@@ -28,9 +29,9 @@ final class StoreAssetRequest extends FormRequest
         $accountId = AccountContext::getOrFail();
 
         return [
-            'asset_type_id' => ['required', 'integer', Rule::exists('asset_types', 'id')->where('account_id', $accountId)->where('status', 'active')],
-            'asset_location_id' => ['nullable', 'integer', Rule::exists('asset_locations', 'id')->where('account_id', $accountId)->where('status', 'active')],
-            'code' => ['nullable', 'string', 'min:2', 'max:30', 'regex:/^[A-Z0-9][A-Z0-9-]*$/', Rule::unique('assets', 'code')->where('account_id', $accountId)],
+            'asset_type_id' => ['required', 'integer', Rule::exists('asset_register_types', 'id')->where('account_id', $accountId)->where('status', 'active')],
+            'asset_location_id' => ['nullable', 'integer', Rule::exists('asset_register_locations', 'id')->where('account_id', $accountId)->where('status', 'active')],
+            'code' => ['nullable', 'string', 'min:2', 'max:30', 'regex:/^[A-Z0-9][A-Z0-9-]*$/', Rule::unique('asset_register_assets', 'code')->where('account_id', $accountId)],
             'name' => ['required', 'string', 'min:1', 'max:150'],
             'brand' => ['nullable', 'string', 'max:100'],
             'model' => ['nullable', 'string', 'max:100'],

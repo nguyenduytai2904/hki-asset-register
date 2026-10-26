@@ -20,6 +20,11 @@ final class AssetRegistryFilterRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $query = $this->query->all();
+        if (! array_key_exists('q', $query) && array_key_exists('search', $query)) {
+            $this->merge(['q' => $query['search']]);
+        }
+
         $filters = [];
         foreach (['status', 'type', 'location', 'warranty'] as $key) {
             $value = $this->input($key);
@@ -29,6 +34,19 @@ final class AssetRegistryFilterRequest extends FormRequest
         }
 
         $this->merge($filters);
+
+        $perPage = filter_var($this->query('per_page', 15), FILTER_VALIDATE_INT);
+        $this->merge(['per_page' => max(1, min(100, $perPage === false ? 15 : $perPage))]);
+
+        $page = filter_var($this->query('page', 1), FILTER_VALIDATE_INT);
+        $this->merge(['page' => max(1, $page === false ? 1 : $page)]);
+
+        if (! $this->query->has('sort_by') && $this->query->has('sort')) {
+            $this->merge(['sort_by' => $this->query('sort')]);
+        }
+        if (! $this->query->has('sort_dir') && $this->query->has('direction')) {
+            $this->merge(['sort_dir' => $this->query('direction')]);
+        }
     }
 
     public function rules(): array
@@ -40,14 +58,15 @@ final class AssetRegistryFilterRequest extends FormRequest
             'status' => ['array', 'max:7'],
             'status.*' => ['string', Rule::in(['available', 'in_use', 'pending', 'in_repair', 'broken', 'lost', 'disposed'])],
             'type' => ['array'],
-            'type.*' => ['integer', Rule::exists('asset_types', 'id')->where('account_id', $accountId)],
+            'type.*' => ['integer', Rule::exists('asset_register_types', 'id')->where('account_id', $accountId)],
             'location' => ['array'],
-            'location.*' => ['integer', Rule::exists('asset_locations', 'id')->where('account_id', $accountId)],
+            'location.*' => ['integer', Rule::exists('asset_register_locations', 'id')->where('account_id', $accountId)],
             'warranty' => ['array', 'max:2'],
             'warranty.*' => ['string', Rule::in(['expiring', 'expired'])],
-            'sort' => ['nullable', Rule::in(['asset', 'status', 'warranty'])],
-            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
-            'per_page' => ['nullable', Rule::in([15, 30, 50])],
+            'sort_by' => ['nullable', 'string'],
+            'sort_dir' => ['nullable', 'string'],
+            'per_page' => ['required', 'integer', 'between:1,100'],
+            'page' => ['required', 'integer', 'min:1'],
         ];
     }
 }

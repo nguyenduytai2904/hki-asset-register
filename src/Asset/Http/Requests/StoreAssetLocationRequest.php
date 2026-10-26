@@ -28,7 +28,7 @@ final class StoreAssetLocationRequest extends FormRequest
         $accountId = AccountContext::getOrFail();
 
         return [
-            'name' => ['required', 'string', 'max:150', Rule::unique('asset_locations', 'name')->where('account_id', $accountId)],
+            'name' => ['required', 'string', 'max:150', Rule::unique('asset_register_locations', 'name')->where('account_id', $accountId)],
             'description' => ['nullable', 'string', 'max:500'],
         ];
     }

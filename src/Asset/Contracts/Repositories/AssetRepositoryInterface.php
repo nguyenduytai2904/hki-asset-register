@@ -67,7 +67,7 @@ interface AssetRepositoryInterface
     public function keeperIsActive(int $accountId, int $keeperId): bool;
 
     /**
-     * @param iterable<AssetType> $types
+     * @param  iterable<AssetType>  $types
      * @return array<int, string>
      */
     public function nextCodes(int $accountId, iterable $types): array;

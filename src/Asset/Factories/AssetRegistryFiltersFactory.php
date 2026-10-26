@@ -22,6 +22,8 @@ final class AssetRegistryFiltersFactory
             sort: (string) ($data['sort'] ?? 'asset'),
             direction: (string) ($data['direction'] ?? 'asc'),
             perPage: (int) ($data['per_page'] ?? 15),
+            page: (int) ($data['page'] ?? 1),
+            hasExplicitSort: ($data['sort_by'] ?? null) !== null,
         );
     }
 }

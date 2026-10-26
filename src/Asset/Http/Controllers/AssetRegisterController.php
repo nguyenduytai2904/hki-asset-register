@@ -4,22 +4,24 @@ declare(strict_types=1);
 
 namespace Hki\AssetRegister\Asset\Http\Controllers;
 
+use App\Http\Controllers\Web\BaseWebController;
+use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
 use Hki\AssetRegister\Asset\Factories\AssetLocationDataFactory;
 use Hki\AssetRegister\Asset\Factories\AssetTypeDataFactory;
-use Hki\AssetRegister\Asset\Http\Requests\StoreAssetLocationRequest;
-use Hki\AssetRegister\Asset\Http\Requests\StoreAssetTypeRequest;
 use Hki\AssetRegister\Asset\Http\Requests\AssetIndexRequest;
 use Hki\AssetRegister\Asset\Http\Requests\AssetMineRequest;
 use Hki\AssetRegister\Asset\Http\Requests\AssetSettingsRequest;
 use Hki\AssetRegister\Asset\Http\Requests\DeleteAssetLocationRequest;
 use Hki\AssetRegister\Asset\Http\Requests\DeleteAssetTypeRequest;
+use Hki\AssetRegister\Asset\Http\Requests\StoreAssetLocationRequest;
+use Hki\AssetRegister\Asset\Http\Requests\StoreAssetTypeRequest;
 use Hki\AssetRegister\Asset\Http\Requests\UpdateAssetLocationRequest;
 use Hki\AssetRegister\Asset\Http\Requests\UpdateAssetTypeRequest;
-use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
+use Hki\AssetRegister\Support\AssetRegisterPreviewData;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
-final class AssetRegisterController
+final class AssetRegisterController extends BaseWebController
 {
     public function __construct(
         private readonly AssetServiceInterface $service,
@@ -35,6 +37,20 @@ final class AssetRegisterController
     public function mine(AssetMineRequest $request): View
     {
         return view('asset-register::asset-register.page', $this->service->minePage($request->user()));
+    }
+
+    public function minePreview(AssetMineRequest $request, string $assetCode): View
+    {
+        $pageData = $this->service->minePage($request->user());
+        $asset = AssetRegisterPreviewData::mineAsset($assetCode);
+
+        abort_if($asset === null, 404);
+
+        return view('asset-register::asset-register.asset-mine-preview-show', [
+            'activeTab' => 'mine',
+            'tabs' => $pageData['tabs'],
+            'asset' => $asset,
+        ]);
     }
 
     public function settings(AssetSettingsRequest $request): View

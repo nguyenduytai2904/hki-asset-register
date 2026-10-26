@@ -21,10 +21,12 @@ final readonly class AssetRegistryFilters
         public string $sort,
         public string $direction,
         public int $perPage,
+        public int $page,
+        public bool $hasExplicitSort,
     ) {}
 
     /**
-     * @return array{q: string, status: list<string>, type: list<string>, location: list<string>, warranty: list<string>, sort: string, direction: string, per_page: int}
+     * @return array{q: string, status: list<string>, type: list<string>, location: list<string>, warranty: list<string>, sort: string, direction: string, per_page: int, page: int, has_explicit_sort: bool}
      */
     public function toArray(): array
     {
@@ -37,6 +39,8 @@ final readonly class AssetRegistryFilters
             'sort' => $this->sort,
             'direction' => $this->direction,
             'per_page' => $this->perPage,
+            'page' => $this->page,
+            'has_explicit_sort' => $this->hasExplicitSort,
         ];
     }
 }

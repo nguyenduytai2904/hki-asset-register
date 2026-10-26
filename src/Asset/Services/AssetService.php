@@ -6,6 +6,7 @@ namespace Hki\AssetRegister\Asset\Services;
 
 use App\Models\User;
 use App\Support\Account\AccountContext;
+use App\Support\Timezone\TimezoneContext;
 use Hki\AssetRegister\Asset\Contracts\Repositories\AssetRepositoryInterface;
 use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
 use Hki\AssetRegister\Asset\DTOs\AssetData;
@@ -16,8 +17,8 @@ use Hki\AssetRegister\Asset\Models\Asset;
 use Hki\AssetRegister\Asset\Models\AssetLocation;
 use Hki\AssetRegister\Asset\Models\AssetType;
 use Hki\AssetRegister\Support\AssetRegisterPreviewData;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 final class AssetService implements AssetServiceInterface
 {
@@ -32,7 +33,7 @@ final class AssetService implements AssetServiceInterface
         if ($user->can('useSelfService', [Asset::class, $accountId])) {
             return 'asset-register.mine';
         }
-        if ($user->can('manageCatalog', [Asset::class, $accountId])) {
+        if ($user->can('accessSettings', [Asset::class, $accountId])) {
             return 'asset-register.settings';
         }
 
@@ -54,7 +55,7 @@ final class AssetService implements AssetServiceInterface
     public function settingsPage(User $user): array
     {
         $accountId = AccountContext::getOrFail();
-        Gate::authorize('manageCatalog', [Asset::class, $accountId]);
+        Gate::authorize('accessSettings', [Asset::class, $accountId]);
 
         $types = $this->assets->typesWithUsage($accountId);
         $nextCodes = $this->assets->nextCodes($accountId, $types);
@@ -67,6 +68,7 @@ final class AssetService implements AssetServiceInterface
             'tabs' => $this->tabs($user, $accountId),
             'types' => $types,
             'locations' => $this->assets->locationsWithUsage($accountId),
+            'canManageCatalog' => $user->can('manageCatalog', [Asset::class, $accountId]),
         ];
     }
 
@@ -159,6 +161,7 @@ final class AssetService implements AssetServiceInterface
             'filters' => $filters->toArray(),
             'types' => $this->assets->filterTypes($accountId),
             'locations' => $this->assets->filterLocations($accountId),
+            'warrantyToday' => TimezoneContext::now()->startOfDay(),
             'canManage' => $user->can('manageCatalog', [Asset::class, $accountId]),
         ];
     }
@@ -209,6 +212,7 @@ final class AssetService implements AssetServiceInterface
             'tabs' => $this->tabs($user, $accountId),
             'asset' => $asset,
             'isKeeperView' => ! $canViewRegistry,
+            'warrantyToday' => TimezoneContext::now()->startOfDay(),
             'canManage' => $user->can('manageCatalog', [Asset::class, $accountId]) && $asset->status !== 'disposed',
         ];
     }
@@ -259,7 +263,7 @@ final class AssetService implements AssetServiceInterface
                 'url' => route('asset-register.registry'),
             ];
         }
-        if ($user->can('manageCatalog', [Asset::class, $accountId])) {
+        if ($user->can('accessSettings', [Asset::class, $accountId])) {
             $tabs[] = [
                 'key' => 'settings',
                 'label' => __('asset-register::asset-register.tabs.settings'),

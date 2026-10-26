@@ -35,6 +35,11 @@ final class AssetPolicy
 
     public function manageCatalog(User $user, int $accountId): bool
     {
+        return $this->canViewRegistry($user, $accountId) && $this->canManage($user, $accountId);
+    }
+
+    public function accessSettings(User $user, int $accountId): bool
+    {
         return $this->canManage($user, $accountId);
     }
 
@@ -60,7 +65,8 @@ final class AssetPolicy
     private function canUseSelfService(User $user, int $accountId): bool
     {
         return $user->hasAccountPermission(AssetRegisterPermissions::SELF_USE, $accountId)
-            || $user->hasAccountPermission(AccountUserPermissionEnum::VIEW, $accountId);
+            || $user->hasAccountPermission(AccountUserPermissionEnum::VIEW, $accountId)
+            || $user->hasAccountPermission(AccountUserPermissionEnum::MANAGE, $accountId);
     }
 
     private function canViewRegistry(User $user, int $accountId): bool

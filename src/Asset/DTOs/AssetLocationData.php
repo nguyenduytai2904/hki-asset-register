@@ -7,7 +7,7 @@ namespace Hki\AssetRegister\Asset\DTOs;
 final readonly class AssetLocationData
 {
     /**
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     public function __construct(public array $attributes) {}
 }

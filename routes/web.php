@@ -12,6 +12,7 @@ Route::middleware(['auth', 'account.scoped', 'plugin.active:asset-register'])
     ->group(function (): void {
         Route::get('/', [AssetRegisterController::class, 'index'])->name('index');
         Route::get('/mine', [AssetRegisterController::class, 'mine'])->name('mine');
+        Route::get('/mine/preview/{assetCode}', [AssetRegisterController::class, 'minePreview'])->where('assetCode', '[A-Z0-9-]+')->name('mine.preview');
         Route::get('/registry', [AssetController::class, 'registry'])->name('registry');
         Route::get('/registry/create', [AssetController::class, 'create'])->name('assets.create');
         Route::post('/registry', [AssetController::class, 'store'])->name('assets.store');
