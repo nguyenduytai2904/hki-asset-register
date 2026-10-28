@@ -29,7 +29,7 @@
         },
         "hkspace": {
             "plugin": "asset-register",
-            "tested-with": "hkspace-core-dev"
+            "tested-with": "6b2cfb835be2fb0eb140d9497deb4026da61b7c0"
         }
     },
     "minimum-stability": "stable",

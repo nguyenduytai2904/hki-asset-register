@@ -8,9 +8,9 @@ require_once dirname(__DIR__, 2).'/Support/InteractsWithAssetRegister.php';
 
 use App\Enums\Account\AccountUserPermissionEnum;
 use App\Models\AccountPlugin;
-use App\Models\Plugin;
 use App\Support\Account\AccountContext;
 use App\Support\Rbac\AccountPermissionCatalogRegistry;
+use App\Support\Plugin\PluginRegistry;
 use Hki\AssetRegister\AssetRegisterModule;
 use Hki\AssetRegister\Rbac\AssetRegisterPermissionProvider;
 use Hki\AssetRegister\Tests\Support\InteractsWithAssetRegister;
@@ -98,7 +98,7 @@ final class AssetPermissionTest extends TestCase
 
         $this->actingAs($actor)
             ->get('/asset-register')
-            ->assertRedirect('/asset-register/registry');
+            ->assertRedirect('/asset-register/mine');
     }
 
     public function test_default_member_can_only_open_my_assets_tab(): void
@@ -114,13 +114,15 @@ final class AssetPermissionTest extends TestCase
         $this->actingAs($actor)
             ->get('/asset-register/mine')
             ->assertOk()
-            ->assertSee('Của tôi');
+            ->assertSee('Của tôi')
+            ->assertSee(__('asset-register::asset-register.mine.not_available_yet'))
+            ->assertDontSee('Dữ liệu minh hoạ');
 
-        $this->actingAs($actor)->get('/asset-register/registry')->assertForbidden();
+        $this->actingAs($actor)->get('/asset-register/registry')->assertNotFound();
         $this->actingAs($actor)->get('/asset-register/settings')->assertForbidden();
     }
 
-    public function test_core_account_manager_can_open_registry_my_assets_and_settings(): void
+    public function test_core_account_manager_can_open_settings_without_registry_routes(): void
     {
         [$actor] = $this->actorWithPermissions([
             AccountUserPermissionEnum::MANAGE->value,
@@ -128,16 +130,13 @@ final class AssetPermissionTest extends TestCase
 
         $this->actingAs($actor)
             ->get('/asset-register')
-            ->assertRedirect('/asset-register/registry');
+            ->assertRedirect('/asset-register/mine');
 
-        $this->actingAs($actor)
-            ->get('/asset-register/registry')
-            ->assertOk()
-            ->assertSeeInOrder(['Của tôi', 'Sổ tài sản', 'Cài đặt']);
+        $this->actingAs($actor)->get('/asset-register/mine')->assertOk();
         $this->actingAs($actor)->get('/asset-register/settings')->assertOk();
     }
 
-    public function test_asset_manager_sees_tabs_in_requested_order(): void
+    public function test_asset_manager_sees_only_implemented_tabs(): void
     {
         [$actor] = $this->actorWithPermissions([
             'asset-register.self.use',
@@ -147,21 +146,46 @@ final class AssetPermissionTest extends TestCase
 
         $this->actingAs($actor)
             ->get('/asset-register')
-            ->assertRedirect('/asset-register/registry');
+            ->assertRedirect('/asset-register/mine');
 
         $this->actingAs($actor)
-            ->get('/asset-register/registry')
+            ->get('/asset-register/mine')
             ->assertOk()
-            ->assertSeeInOrder(['Của tôi', 'Sổ tài sản', 'Cài đặt']);
+            ->assertSeeInOrder(['Của tôi', 'Cài đặt'])
+            ->assertDontSee('Sổ tài sản');
+    }
+
+    public function test_registry_only_member_has_no_uc1_to_uc3_landing_page(): void
+    {
+        [$actor] = $this->actorWithPermissions(['asset-register.assets.view']);
+
+        $this->actingAs($actor)->get('/asset-register')->assertForbidden();
+        $this->actingAs($actor)->get('/asset-register/registry')->assertNotFound();
+    }
+
+    public function test_uc4_to_uc7_routes_are_not_registered_in_this_pr(): void
+    {
+        [$actor] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+
+        $this->actingAs($actor)->get('/asset-register/registry')->assertNotFound();
+        $this->actingAs($actor)->get('/asset-register/registry/create')->assertNotFound();
+        $this->actingAs($actor)->post('/asset-register/registry')->assertNotFound();
+        $this->actingAs($actor)->get('/asset-register/assets/1')->assertNotFound();
+        $this->actingAs($actor)->get('/asset-register/assets/1/edit')->assertNotFound();
+        $this->actingAs($actor)->put('/asset-register/assets/1')->assertNotFound();
     }
 
     public function test_account_without_plugin_grant_is_blocked(): void
     {
         $this->requirePlugin(AssetRegisterModule::CODE);
         [$owner, $account] = $this->makeAccountWithFullAccessOwner('ungranted');
+        $this->activateSubscriptionFor($account);
         [$actor] = $this->addMemberWithPermissions($account, ['asset-register.assets.manage'], 'ungranted actor');
         AccountPlugin::query()->where('plugin_code', AssetRegisterModule::CODE)->delete();
-        Plugin::query()->where('code', AssetRegisterModule::CODE)->delete();
+        app(PluginRegistry::class)->flushAccountCache((int) $account->id);
         AccountContext::force((int) $account->id);
 
         $this->actingAs($actor)
@@ -189,7 +213,7 @@ final class AssetPermissionTest extends TestCase
             ->get('/asset-register')
             ->assertRedirect('/asset-register/settings');
 
-        $this->actingAs($actor)->get('/asset-register/registry')->assertForbidden();
+        $this->actingAs($actor)->get('/asset-register/registry')->assertNotFound();
         $this->actingAs($actor)->get('/asset-register/settings')->assertOk()
             ->assertSee('Cài đặt')
             ->assertSee(__('asset-register::asset-register.settings.manage_requires_view'))

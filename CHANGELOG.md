@@ -2,19 +2,12 @@
 
 ## [Unreleased]
 
-- **Tính năng**: Hoàn thiện skeleton plugin theo Quy chuẩn xây dựng plugin 1.0.
-- **Lược đồ**: plugin sở hữu năm bảng asset và có lifecycle uninstall/purge.
-- **Cấu hình máy chủ**: `ASSET_REGISTER_ENABLED` (mặc định `true`; hiện là cấu hình mẫu).
-- **Ghi chú triển khai**: chạy `php artisan plugin:sync`, sau đó grant plugin cho account cần demo.
-- **Không tương thích**: không.
-- **Kiểm thử**: PHP lint và smoke test manifest.
+## [0.1.0] — 2026-10-28
 
-## [0.1.0] — 2026-10-20
-
-PATCH — Bản demo Hello World đầu tiên.
-- **Tính năng**: bản demo starter cũ; đã được loại bỏ khỏi package hiện tại.
-- **Lược đồ**: không.
-- **Cấu hình máy chủ**: không.
-- **Ghi chú triển khai**: không.
-- **Không tương thích**: không.
-- **Kiểm thử**: PHP lint.
+MINOR — Phát hành các use case UC-001–UC-003.
+- **Tính năng**: điều hướng và phân quyền; quản lý loại tài sản và vị trí; trang “Của tôi” hiển thị trạng thái trống cho đến khi UC-008 được triển khai.
+- **Lược đồ**: sở hữu năm bảng `asset_register_*`; migration chuyển đổi tên bảng thử nghiệm cũ và bổ sung account scope cho handover/history.
+- **Cấu hình máy chủ**: không yêu cầu cấu hình mới.
+- **Ghi chú triển khai**: cài package, chạy `php artisan package:discover`, `php artisan migrate`, sau đó `php artisan plugin:sync --prune` và grant plugin cho account cần dùng.
+- **Không tương thích**: không; UC-004–UC-007 chưa được phát hành trong phiên bản này.
+- **Kiểm thử**: 17 Asset plugin tests (114 assertions) và `php artisan route:list --path=asset-register`.

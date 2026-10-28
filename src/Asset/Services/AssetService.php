@@ -8,14 +8,11 @@ use App\Models\User;
 use App\Support\Account\AccountContext;
 use Hki\AssetRegister\Asset\Contracts\Repositories\AssetRepositoryInterface;
 use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
-use Hki\AssetRegister\Asset\DTOs\AssetData;
 use Hki\AssetRegister\Asset\DTOs\AssetLocationData;
-use Hki\AssetRegister\Asset\DTOs\AssetRegistryFilters;
 use Hki\AssetRegister\Asset\DTOs\AssetTypeData;
 use Hki\AssetRegister\Asset\Models\Asset;
 use Hki\AssetRegister\Asset\Models\AssetLocation;
 use Hki\AssetRegister\Asset\Models\AssetType;
-use Hki\AssetRegister\Support\AssetRegisterPreviewData;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
@@ -26,9 +23,6 @@ final class AssetService implements AssetServiceInterface
     public function landingRoute(User $user): string
     {
         $accountId = AccountContext::getOrFail();
-        if ($user->can('viewRegistry', [Asset::class, $accountId])) {
-            return 'asset-register.registry';
-        }
         if ($user->can('useSelfService', [Asset::class, $accountId])) {
             return 'asset-register.mine';
         }
@@ -47,7 +41,6 @@ final class AssetService implements AssetServiceInterface
         return [
             'activeTab' => 'mine',
             'tabs' => $this->tabs($user, $accountId),
-            'preview' => AssetRegisterPreviewData::mine(),
         ];
     }
 
@@ -138,106 +131,6 @@ final class AssetService implements AssetServiceInterface
         $this->assets->deleteLocation($location);
     }
 
-    public function registryPage(User $user, AssetRegistryFilters $filters): array
-    {
-        $accountId = AccountContext::getOrFail();
-        Gate::authorize('viewRegistry', [Asset::class, $accountId]);
-        $assets = $this->assets->paginateRegistry($accountId, $filters);
-        $keeperIds = $assets->getCollection()->pluck('current_keeper_id')->filter()->unique()->values();
-        $activeKeeperIds = $this->assets->activeKeeperIds($accountId, $keeperIds);
-
-        $assets->getCollection()->each(function (Asset $asset) use ($activeKeeperIds): void {
-            $asset->setAttribute(
-                'keeper_is_inactive',
-                $asset->current_keeper_id !== null && ! $activeKeeperIds->contains($asset->current_keeper_id),
-            );
-        });
-
-        return [
-            'activeTab' => 'registry',
-            'tabs' => $this->tabs($user, $accountId),
-            'assets' => $assets,
-            'filters' => $filters->toArray(),
-            'types' => $this->assets->filterTypes($accountId),
-            'locations' => $this->assets->filterLocations($accountId),
-            'canManage' => $user->can('manageCatalog', [Asset::class, $accountId]),
-        ];
-    }
-
-    public function createForm(User $user): array
-    {
-        $accountId = AccountContext::getOrFail();
-        Gate::authorize('manageRegistry', [Asset::class, $accountId]);
-        $types = $this->assets->activeTypes($accountId);
-
-        return [
-            'activeTab' => 'registry',
-            'tabs' => $this->tabs($user, $accountId),
-            'asset' => null,
-            'types' => $types,
-            'locations' => $this->assets->activeLocations($accountId),
-            'nextCodes' => $this->assets->nextCodes($accountId, $types),
-        ];
-    }
-
-    public function create(User $user, AssetData $data): Asset
-    {
-        $accountId = AccountContext::getOrFail();
-        Gate::authorize('manageRegistry', [Asset::class, $accountId]);
-
-        return $this->assets->createWithHistory($accountId, (int) $user->id, $data);
-    }
-
-    public function detailPage(User $user, int $assetId): array
-    {
-        $accountId = AccountContext::getOrFail();
-        $asset = $this->assets->findForShow($accountId, $assetId);
-        Gate::authorize('viewAsset', [Asset::class, $assetId, $accountId]);
-        $canViewRegistry = $user->can('viewRegistry', [Asset::class, $accountId]);
-
-        if (! $canViewRegistry) {
-            $asset->setRelation('handovers', $asset->handovers->where('recipient_id', $user->id)->values());
-            $asset->setRelation('histories', $asset->histories->where('user_id', $user->id)->values());
-        }
-
-        $activeKeeper = $asset->current_keeper_id === null
-            ? false
-            : $this->assets->keeperIsActive($accountId, (int) $asset->current_keeper_id);
-        $asset->setAttribute('keeper_is_inactive', $asset->current_keeper_id !== null && ! $activeKeeper);
-
-        return [
-            'activeTab' => $canViewRegistry ? 'registry' : 'mine',
-            'tabs' => $this->tabs($user, $accountId),
-            'asset' => $asset,
-            'isKeeperView' => ! $canViewRegistry,
-            'canManage' => $user->can('manageCatalog', [Asset::class, $accountId]) && $asset->status !== 'disposed',
-        ];
-    }
-
-    public function editForm(User $user, int $assetId): array
-    {
-        $accountId = AccountContext::getOrFail();
-        Gate::authorize('manageAsset', [Asset::class, $assetId, $accountId]);
-        $asset = $this->assets->findForEdit($accountId, $assetId);
-
-        return [
-            'activeTab' => 'registry',
-            'tabs' => $this->tabs($user, $accountId),
-            'asset' => $asset,
-            'types' => $this->assets->typesForAsset($accountId, $asset),
-            'locations' => $this->assets->locationsForAsset($accountId, $asset),
-            'nextCodes' => [],
-        ];
-    }
-
-    public function update(User $user, int $assetId, AssetData $data): Asset
-    {
-        $accountId = AccountContext::getOrFail();
-        Gate::authorize('manageAsset', [Asset::class, $assetId, $accountId]);
-
-        return $this->assets->updateWithHistory($accountId, (int) $user->id, $assetId, $data);
-    }
-
     /**
      * @return list<array{key: string, label: string, icon: string, url: string}>
      */
@@ -250,14 +143,6 @@ final class AssetService implements AssetServiceInterface
                 'label' => __('asset-register::asset-register.tabs.mine'),
                 'icon' => 'person',
                 'url' => route('asset-register.mine'),
-            ];
-        }
-        if ($user->can('viewRegistry', [Asset::class, $accountId])) {
-            $tabs[] = [
-                'key' => 'registry',
-                'label' => __('asset-register::asset-register.tabs.registry'),
-                'icon' => 'inventory_2',
-                'url' => route('asset-register.registry'),
             ];
         }
         if ($user->can('accessSettings', [Asset::class, $accountId])) {

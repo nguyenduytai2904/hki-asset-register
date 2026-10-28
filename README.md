@@ -1,9 +1,9 @@
 # HKSpace Asset Register
 
 Composer package `hki/asset-register` adds an account-scoped asset register to
-HKSpace. It is intended for account administrators and asset managers who
-maintain equipment catalogs and asset records, and for members who need to
-view assets assigned to them.
+HKSpace. This branch implements UC-001–UC-003: permission/navigation setup and
+account-scoped asset type and location catalogs. The asset register, asset
+records, and self-service asset list are delivered in later use-case branches.
 
 | Item | Value |
 | --- | --- |
@@ -21,15 +21,17 @@ group. The account must also have the plugin granted and active.
 
 | Key | Label | Allowed actions |
 | --- | --- | --- |
-| `asset-register.self.use` | Tự phục vụ | Open the “Của tôi” tab and view the member's assigned-asset area. |
-| `asset-register.assets.view` | Xem sổ tài sản | Open and read the account's asset register. |
+| `asset-register.self.use` | Tự phục vụ | Open the “Của tôi” placeholder; the assigned-asset list is UC-008 and is not included in this branch. |
+| `asset-register.assets.view` | Xem sổ tài sản | Permission key for the asset-register page, which is not included in this branch. |
 | `asset-register.assets.manage` | Quản lý sổ tài sản | Manage asset-type and location catalogs. Asset-record mutations require the register-view permission as well. |
 
 The core account `view` permission also grants the self-service entry point;
-the core account `manage` permission grants register viewing and management.
-Having only `asset-register.assets.manage` opens Settings but does not grant
-access to the register. Suspended account members and accounts without the
-plugin grant are blocked by the core access middleware.
+the core account `manage` permission grants asset-register view and management
+permissions. In this branch, menu navigation skips the unimplemented register
+page and opens the first available implemented page: “Của tôi” or Settings.
+Having only `asset-register.assets.manage` opens Settings. Suspended account
+members and accounts without the plugin grant are blocked by the core access
+middleware.
 
 ## Configuration
 
@@ -105,7 +107,7 @@ src/Asset/
 src/Console/Commands/             Plugin Artisan commands
 src/Lifecycle/                    Install, grant, revoke, uninstall and purge
 src/Rbac/                         Permission keys and core permission provider
-src/Support/                      Cross-domain preview and schema helpers
+src/Support/                      Schema and plugin support helpers
 tests/                            Feature, architecture and E2E tests
 ```
 
@@ -136,33 +138,14 @@ development fixture.
 
 ```bash
 cd /path/to/hk-space-be
-php artisan test --testsuite=Plugins --filter=AssetPermissionTest
-php artisan test --testsuite=Plugins --filter=AssetDevelopmentSeederTest
+php artisan route:list --path=asset-register
+php artisan test --testsuite=Plugins --filter=Asset
 ```
 
 The development fixture asserts exactly **9 asset types, 5 locations and 18
 assets** for its account. The core test database is derived from the core
 `.env` `DB_DATABASE` plus `_testing`; do not point tests at a development or
 production database.
-
-## UC-004 to UC-007: Asset register operations
-
-The `feature/asset-register-uc4-uc7` review branch adds the live,
-account-scoped registry and asset-record workflows:
-
-- UC-004: search, multi-value status/type/location/warranty filters, sorting,
-  pagination, empty states and former-member keeper labels.
-- UC-005: create an asset with a generated or manually entered account-unique
-  code, an initial history record, purchase/warranty details and catalog
-  validation. Generated codes use a per-type sequence and skip occupied codes.
-- UC-006: view account-scoped asset details and history. A keeper without
-  register access is limited to their own detail view and related history.
-- UC-007: edit asset metadata without changing its code, preserve unchanged
-  disabled catalog selections, and record field changes in history.
-
-Asset-record routes require the relevant account permission and an active
-plugin grant. Disposed records are read-only; lifecycle actions such as
-handover, status transition and disposal are outside UC-004 to UC-007.
 
 Playwright is configured to use `ASSET_REGISTER_BASE_URL`. Start an isolated
 HKSpace test instance with a seeded test account, then run:
@@ -193,27 +176,12 @@ E2E tests at production.
 - A type prefix cannot be changed after the type is used by an asset. A type
   or location referenced by an asset cannot be deleted; it can be disabled.
 
-### Asset records
-
-- Asset codes are account-unique, 2–30 characters, normalized to uppercase,
-  and limited to ASCII letters, digits and hyphens. Generated codes use the
-  type prefix and per-type sequence.
-- Name is required (1–150 characters); brand, model and serial are up to 100
-  characters; configuration and note are up to 2,000; supplier is up to 150;
-  receipt number is up to 100.
-- Condition is one of `new`, `good`, `fair` or `poor`. Warranty end date cannot
-  precede purchase date. New records require an active type and, if selected,
-  an active location.
-- Account scoping is enforced on reads and writes. A disabled current catalog
-  value may be retained while editing, but a different disabled value cannot
-  be selected.
-
 ### Release scope
 
-- The “Của tôi” page is currently a static development preview; self-service
-  actions are not implemented.
-- Handover actions, status transitions and disposal actions are not
-  implemented. A disposed record, if present, is read-only.
+- The “Của tôi” page displays an honest empty state; asset listing and
+  self-service actions are not implemented in this branch (UC-008).
+- The asset register and asset-record workflows are not implemented in this
+  branch (UC-004–UC-007).
 - The plugin exposes web routes only; no public plugin API, import/export,
   file upload, notifications, queue processing or realtime updates are
   provided.

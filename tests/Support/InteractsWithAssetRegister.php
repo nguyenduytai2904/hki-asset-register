@@ -6,9 +6,12 @@ namespace Hki\AssetRegister\Tests\Support;
 
 use App\Models\Account;
 use App\Models\AccountPlugin;
+use App\Models\PlanPrice;
 use App\Models\Plugin;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Support\Account\AccountContext;
+use App\Support\Edition\Edition;
 use App\Support\Plugin\PluginRegistry;
 use Hki\AssetRegister\AssetRegisterModule;
 use Tests\Support\AccountBillingFixture;
@@ -21,12 +24,28 @@ trait InteractsWithAssetRegister
     {
         $this->requirePlugin(AssetRegisterModule::CODE);
         [$owner, $account] = $this->makeAccountWithFullAccessOwner($label);
+        $this->activateSubscriptionFor($account);
         [$actor] = $this->addMemberWithPermissions($account, $permissions, $label.' actor');
 
         $this->activatePluginFor($account, $owner);
         AccountContext::force((int) $account->id);
 
         return [$actor, $account];
+    }
+
+    private function activateSubscriptionFor(Account $account): void
+    {
+        if (! Edition::billingEnabled()) {
+            return;
+        }
+
+        $planPrice = PlanPrice::query()->firstOrFail();
+        Subscription::query()->create([
+            'account_id' => $account->id,
+            'plan_price_id' => $planPrice->id,
+            'status' => 'active',
+            'current_period_end' => now()->addYear(),
+        ]);
     }
 
     private function activatePluginFor(Account $account, User $grantedBy): void
