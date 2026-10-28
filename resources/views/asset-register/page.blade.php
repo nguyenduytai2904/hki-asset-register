@@ -170,14 +170,7 @@
 @endif
 @if ($activeTab === 'registry')
     @if ($canManage)
-        <dialog class="ar-dialog ar-asset-dialog" id="ar-asset-create-dialog" aria-labelledby="ar-asset-dialog-title">
-            <header class="ar-dialog-header">
-                <h2 id="ar-asset-dialog-title">{{ __('asset-register::asset-register.asset_form.create_title') }}</h2>
-                <button class="ar-dialog-close" type="button" data-ar-close-asset-dialog aria-label="{{ __('asset-register::asset-register.asset_form.cancel') }}"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
-            </header>
-            <div class="ar-asset-dialog-content" id="ar-asset-dialog-content"></div>
-            <div class="ar-dialog-feedback" id="ar-asset-dialog-feedback" role="alert" hidden></div>
-        </dialog>
+        @include('asset-register::asset-register.partials.asset-form-dialog')
     @endif
 @endif
 </main>

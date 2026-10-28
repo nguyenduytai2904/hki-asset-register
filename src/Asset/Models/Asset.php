@@ -22,13 +22,15 @@ final class Asset extends Model
         'account_id', 'asset_type_id', 'asset_location_id', 'code', 'name',
         'brand', 'model', 'serial', 'condition', 'status', 'current_keeper_id',
         'warranty_end_date', 'purchase_date', 'configuration', 'supplier',
-        'receipt_number', 'note', 'disposed_at', 'disposal_method', 'disposal_basis',
+        'warranty_duration_months', 'receipt_number', 'note', 'disposed_at',
+        'disposal_method', 'disposal_basis',
     ];
 
     protected $casts = [
         'disposed_at' => 'date',
         'purchase_date' => 'date',
         'warranty_end_date' => 'date',
+        'warranty_duration_months' => 'integer',
     ];
 
     public function keeper(): BelongsTo

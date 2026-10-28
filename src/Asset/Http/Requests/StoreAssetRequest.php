@@ -21,7 +21,15 @@ final class StoreAssetRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $code = strtoupper(trim((string) $this->input('code', '')));
-        $this->merge(['code' => $code === '' ? null : $code]);
+        $durationPreset = (string) $this->input('warranty_duration_preset', '');
+        $durationMonths = $durationPreset === 'custom'
+            ? $this->input('warranty_duration_custom_months')
+            : $durationPreset;
+
+        $this->merge([
+            'code' => $code === '' ? null : $code,
+            'warranty_duration_months' => $durationMonths === '' ? null : $durationMonths,
+        ]);
     }
 
     public function rules(): array
@@ -38,8 +46,11 @@ final class StoreAssetRequest extends FormRequest
             'serial' => ['nullable', 'string', 'max:100'],
             'configuration' => ['nullable', 'string', 'max:2000'],
             'condition' => ['required', Rule::in(['new', 'good', 'fair', 'poor'])],
-            'purchase_date' => ['nullable', 'date'],
-            'warranty_end_date' => ['nullable', 'date', 'after_or_equal:purchase_date'],
+            'purchase_date' => ['nullable', 'required_if:warranty_duration_preset,3,6,12,24,custom', 'date_format:Y-m-d'],
+            'warranty_end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:purchase_date'],
+            'warranty_duration_preset' => ['nullable', Rule::in(['3', '6', '12', '24', 'custom'])],
+            'warranty_duration_custom_months' => ['exclude_unless:warranty_duration_preset,custom', 'required', 'integer', 'between:1,1200'],
+            'warranty_duration_months' => ['nullable', 'integer', 'between:1,1200'],
             'supplier' => ['nullable', 'string', 'max:150'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
             'note' => ['nullable', 'string', 'max:2000'],

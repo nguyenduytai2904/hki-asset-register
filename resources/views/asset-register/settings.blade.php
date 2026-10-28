@@ -33,9 +33,6 @@
         </div>
     </header>
 
-    @if (session('success'))
-        <div class="ar-alert ar-alert-success" role="status">{{ session('success') }}</div>
-    @endif
     @if ($errors->any())
         <div class="ar-alert ar-alert-error" role="alert">
             @foreach ($errors->all() as $error)
@@ -64,11 +61,11 @@
             <form class="ar-form ar-dialog-form" method="POST" action="{{ route('asset-register.settings.asset-types.store') }}">
                     @csrf
                     <input type="hidden" name="_asset_register_dialog" value="create-type">
-                    <label>{{ __('asset-register::asset-register.settings.name') }} <input name="name" maxlength="100" required value="{{ old('name') }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
-                    <label>{{ __('asset-register::asset-register.settings.prefix') }} <input name="prefix" minlength="2" maxlength="6" required value="{{ old('prefix') }}">@error('prefix')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                    <label>{{ __('asset-register::asset-register.settings.name') }} <span class="ar-required">*</span><input name="name" maxlength="100" required value="{{ old('name') }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                    <label>{{ __('asset-register::asset-register.settings.prefix') }} <span class="ar-required">*</span><input name="prefix" minlength="2" maxlength="6" required value="{{ old('prefix') }}">@error('prefix')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                     <small class="ar-form-hint">{{ __('asset-register::asset-register.settings.first_code_preview') }} <output data-ar-first-code data-empty-value="--">{{ old('prefix') ? strtoupper(old('prefix')).'-0001' : '--' }}</output></small>
                     <fieldset class="ar-icon-picker">
-                        <legend>{{ __('asset-register::asset-register.settings.icon') }}</legend>
+                        <legend>{{ __('asset-register::asset-register.settings.icon') }} <span class="ar-required">*</span></legend>
                         <div class="ar-icon-picker-options">
                             @foreach ($assetTypeIcons as $icon)
                                 <label>
@@ -109,13 +106,19 @@
                             <td><span @class(['ar-status', 'is-inactive' => $type->status === 'inactive'])>{{ __('asset-register::asset-register.settings.' . $type->status) }}</span></td>
                             <td class="ar-actions">
                                 @if ($canManageCatalog)
-                                <details>
-                                    <summary aria-label="{{ __('asset-register::asset-register.settings.edit') }}">⋮</summary>
-                                    <div class="ar-action-menu">
-                                        <form method="POST" action="{{ route('asset-register.settings.asset-types.update', $type->id) }}">
+                                    <button class="ar-button ar-button-quiet ar-action-trigger" type="button" data-ar-open-dialog="ar-edit-type-{{ $type->id }}-dialog" aria-label="{{ __('asset-register::asset-register.settings.edit') }}">
+                                        <span class="material-symbols-rounded" aria-hidden="true">more_vert</span>
+                                    </button>
+                                    <dialog class="ar-dialog" id="ar-edit-type-{{ $type->id }}-dialog" aria-labelledby="ar-edit-type-{{ $type->id }}-title">
+                                        <header class="ar-dialog-header">
+                                            <h2 id="ar-edit-type-{{ $type->id }}-title">{{ __('asset-register::asset-register.settings.edit') }} · {{ $type->name }}</h2>
+                                            <button class="ar-dialog-close" type="button" data-ar-close-dialog aria-label="{{ __('asset-register::asset-register.asset_form.cancel') }}"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
+                                        </header>
+                                        <form class="ar-form ar-dialog-form" method="POST" action="{{ route('asset-register.settings.asset-types.update', $type->id) }}">
                                             @csrf @method('PUT')
-                                            <label>{{ __('asset-register::asset-register.settings.name') }} <input name="name" maxlength="100" required value="{{ $type->name }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
-                                            <label>{{ __('asset-register::asset-register.settings.prefix') }}
+                                            <input type="hidden" name="_asset_register_dialog" value="edit-type-{{ $type->id }}">
+                                            <label>{{ __('asset-register::asset-register.settings.name') }} <span class="ar-required">*</span><input name="name" maxlength="100" required value="{{ $type->name }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                                            <label>{{ __('asset-register::asset-register.settings.prefix') }} <span class="ar-required">*</span>
                                                 @if ($type->assets_count > 0)
                                                     <input type="hidden" name="prefix" value="{{ $type->prefix }}">
                                                 @endif
@@ -125,8 +128,8 @@
                                                 @endif
                                                 @error('prefix')<small class="ar-field-error">{{ $message }}</small>@enderror
                                             </label>
-                                            <label>{{ __('asset-register::asset-register.settings.icon') }}
-                                                <select name="icon">
+                                            <label>{{ __('asset-register::asset-register.settings.icon') }} <span class="ar-required">*</span>
+                                                <select name="icon" required>
                                                     @if (! in_array($type->icon, $assetTypeIcons, true))
                                                         <option value="{{ $type->icon }}" selected>{{ $type->icon }}</option>
                                                     @endif
@@ -136,29 +139,29 @@
                                                 </select>
                                             </label>
                                             <label>{{ __('asset-register::asset-register.settings.description_label') }} <input name="description" maxlength="500" value="{{ $type->description }}"></label>
-                                            <label>{{ __('asset-register::asset-register.settings.status') }}
-                                                <select name="status">
+                                            <label>{{ __('asset-register::asset-register.settings.status') }} <span class="ar-required">*</span>
+                                                <select name="status" required>
                                                     <option value="active" @selected($type->status === 'active')>{{ __('asset-register::asset-register.settings.active') }}</option>
                                                     <option value="inactive" @selected($type->status === 'inactive')>{{ __('asset-register::asset-register.settings.inactive') }}</option>
                                                 </select>
                                             </label>
-                                            <button class="ar-button ar-button-dark" type="submit">{{ __('asset-register::asset-register.settings.save') }}</button>
+                                            <footer class="ar-dialog-footer">
+                                                @if ($type->assets_count === 0)
+                                                    <button class="ar-button ar-button-danger ar-dialog-delete-action" type="submit" form="ar-delete-type-{{ $type->id }}" data-ar-confirmation="type">{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                @endif
+                                                <button class="ar-button" type="button" data-ar-close-dialog>{{ __('asset-register::asset-register.asset_form.cancel') }}</button>
+                                                <button class="ar-button ar-button-dark" type="submit">{{ __('asset-register::asset-register.settings.save') }}</button>
+                                            </footer>
                                         </form>
                                         @if ($type->assets_count === 0)
-                                            <form method="POST" action="{{ route('asset-register.settings.asset-types.delete', $type->id) }}">
+                                            <form id="ar-delete-type-{{ $type->id }}" method="POST" action="{{ route('asset-register.settings.asset-types.delete', $type->id) }}">
                                                 @csrf @method('DELETE')
-                                                <button
-                                                    class="ar-button ar-button-danger"
-                                                    type="submit"
-                                                    data-ar-confirmation="type"
-                                                >{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                <input type="hidden" name="_asset_register_dialog" value="edit-type-{{ $type->id }}">
                                             </form>
                                         @else
-                                            <button class="ar-button ar-button-danger" type="button" disabled>{{ __('asset-register::asset-register.settings.delete') }}</button>
-                                            <span class="ar-form-hint">{{ __('asset-register::asset-register.settings.cannot_delete_in_use', ['count' => $type->assets_count]) }}</span>
+                                            <p class="ar-form-hint">{{ __('asset-register::asset-register.settings.cannot_delete_in_use', ['count' => $type->assets_count]) }}</p>
                                         @endif
-                                    </div>
-                                </details>
+                                    </dialog>
                                 @else
                                     <span class="ar-muted">--</span>
                                 @endif
@@ -191,7 +194,7 @@
             <form class="ar-form ar-dialog-form" method="POST" action="{{ route('asset-register.settings.locations.store') }}">
                     @csrf
                     <input type="hidden" name="_asset_register_dialog" value="create-location">
-                    <label>{{ __('asset-register::asset-register.settings.name') }} <input name="name" maxlength="150" required value="{{ old('name') }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                    <label>{{ __('asset-register::asset-register.settings.name') }} <span class="ar-required">*</span><input name="name" maxlength="150" required value="{{ old('name') }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                     <label>{{ __('asset-register::asset-register.settings.description_label') }} <input name="description" maxlength="500" value="{{ old('description') }}"></label>
                     <footer class="ar-dialog-footer">
                         <button class="ar-button" type="button" data-ar-close-dialog>{{ __('asset-register::asset-register.asset_form.cancel') }}</button>
@@ -220,36 +223,42 @@
                             <td><span @class(['ar-status', 'is-inactive' => $location->status === 'inactive'])>{{ __('asset-register::asset-register.settings.' . $location->status) }}</span></td>
                             <td class="ar-actions">
                                 @if ($canManageCatalog)
-                                <details>
-                                    <summary aria-label="{{ __('asset-register::asset-register.settings.edit') }}">⋮</summary>
-                                    <div class="ar-action-menu">
-                                        <form method="POST" action="{{ route('asset-register.settings.locations.update', $location->id) }}">
+                                    <button class="ar-button ar-button-quiet ar-action-trigger" type="button" data-ar-open-dialog="ar-edit-location-{{ $location->id }}-dialog" aria-label="{{ __('asset-register::asset-register.settings.edit') }}">
+                                        <span class="material-symbols-rounded" aria-hidden="true">more_vert</span>
+                                    </button>
+                                    <dialog class="ar-dialog" id="ar-edit-location-{{ $location->id }}-dialog" aria-labelledby="ar-edit-location-{{ $location->id }}-title">
+                                        <header class="ar-dialog-header">
+                                            <h2 id="ar-edit-location-{{ $location->id }}-title">{{ __('asset-register::asset-register.settings.edit') }} · {{ $location->name }}</h2>
+                                            <button class="ar-dialog-close" type="button" data-ar-close-dialog aria-label="{{ __('asset-register::asset-register.asset_form.cancel') }}"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
+                                        </header>
+                                        <form class="ar-form ar-dialog-form" method="POST" action="{{ route('asset-register.settings.locations.update', $location->id) }}">
                                             @csrf @method('PUT')
-                                            <label>{{ __('asset-register::asset-register.settings.name') }} <input name="name" maxlength="150" required value="{{ $location->name }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
+                                            <input type="hidden" name="_asset_register_dialog" value="edit-location-{{ $location->id }}">
+                                            <label>{{ __('asset-register::asset-register.settings.name') }} <span class="ar-required">*</span><input name="name" maxlength="150" required value="{{ $location->name }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                                             <label>{{ __('asset-register::asset-register.settings.description_label') }} <input name="description" maxlength="500" value="{{ $location->description }}"></label>
-                                            <label>{{ __('asset-register::asset-register.settings.status') }}
-                                                <select name="status">
+                                            <label>{{ __('asset-register::asset-register.settings.status') }} <span class="ar-required">*</span>
+                                                <select name="status" required>
                                                     <option value="active" @selected($location->status === 'active')>{{ __('asset-register::asset-register.settings.active') }}</option>
                                                     <option value="inactive" @selected($location->status === 'inactive')>{{ __('asset-register::asset-register.settings.inactive') }}</option>
                                                 </select>
                                             </label>
-                                            <button class="ar-button ar-button-dark" type="submit">{{ __('asset-register::asset-register.settings.save') }}</button>
+                                            <footer class="ar-dialog-footer">
+                                                @if ($location->assets_count === 0)
+                                                    <button class="ar-button ar-button-danger ar-dialog-delete-action" type="submit" form="ar-delete-location-{{ $location->id }}" data-ar-confirmation="location">{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                @endif
+                                                <button class="ar-button" type="button" data-ar-close-dialog>{{ __('asset-register::asset-register.asset_form.cancel') }}</button>
+                                                <button class="ar-button ar-button-dark" type="submit">{{ __('asset-register::asset-register.settings.save') }}</button>
+                                            </footer>
                                         </form>
                                         @if ($location->assets_count === 0)
-                                            <form method="POST" action="{{ route('asset-register.settings.locations.delete', $location->id) }}">
+                                            <form id="ar-delete-location-{{ $location->id }}" method="POST" action="{{ route('asset-register.settings.locations.delete', $location->id) }}">
                                                 @csrf @method('DELETE')
-                                                <button
-                                                    class="ar-button ar-button-danger"
-                                                    type="submit"
-                                                    data-ar-confirmation="location"
-                                                >{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                <input type="hidden" name="_asset_register_dialog" value="edit-location-{{ $location->id }}">
                                             </form>
                                         @else
-                                            <button class="ar-button ar-button-danger" type="button" disabled>{{ __('asset-register::asset-register.settings.delete') }}</button>
-                                            <span class="ar-form-hint">{{ __('asset-register::asset-register.settings.cannot_delete_in_use', ['count' => $location->assets_count]) }}</span>
+                                            <p class="ar-form-hint">{{ __('asset-register::asset-register.settings.cannot_delete_in_use', ['count' => $location->assets_count]) }}</p>
                                         @endif
-                                    </div>
-                                </details>
+                                    </dialog>
                                 @else
                                     <span class="ar-muted">--</span>
                                 @endif

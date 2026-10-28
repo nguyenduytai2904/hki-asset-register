@@ -83,6 +83,7 @@ final class AssetRegistryWarrantyFilterTest extends TestCase
             $localToday = $this->createAsset((int) $account->id, $typeId, 'LT-0002', 'available', '2026-10-24');
             $localTomorrow = $this->createAsset((int) $account->id, $typeId, 'LT-0003', 'available', '2026-10-25');
             $disposedToday = $this->createAsset((int) $account->id, $typeId, 'LT-0004', 'disposed', '2026-10-24');
+            $localInSeventeenDays = $this->createAsset((int) $account->id, $typeId, 'LT-0005', 'available', '2026-11-10');
             $repository = app(AssetRepositoryInterface::class);
 
             self::assertSame(
@@ -92,7 +93,7 @@ final class AssetRegistryWarrantyFilterTest extends TestCase
                     ->modelKeys(),
             );
             self::assertSame(
-                [$localTomorrow],
+                [$localTomorrow, $localInSeventeenDays],
                 $repository->paginateRegistry((int) $account->id, $this->filters(['expiring']))
                     ->getCollection()
                     ->modelKeys(),
@@ -108,10 +109,17 @@ final class AssetRegistryWarrantyFilterTest extends TestCase
                 ->assertDontSee(__('asset-register::asset-register.registry.warranty_today'))
                 ->assertDontSee(__('asset-register::asset-register.registry.expired'));
             $registry = $this->actingAs($actor)->get(route('asset-register.registry'))->assertOk();
+            $registry
+                ->assertSee(__('asset-register::asset-register.registry.days_remaining', ['count' => 1]))
+                ->assertSee(__('asset-register::asset-register.registry.days_remaining', ['count' => 17]));
             self::assertSame(
                 1,
                 substr_count((string) $registry->getContent(), __('asset-register::asset-register.registry.warranty_today')),
             );
+            $this->actingAs($actor)
+                ->get(route('asset-register.assets.show', $localInSeventeenDays))
+                ->assertOk()
+                ->assertSee(__('asset-register::asset-register.registry.days_remaining', ['count' => 17]));
         } finally {
             TimezoneContext::clear();
             Carbon::setTestNow();

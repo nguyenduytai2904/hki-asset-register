@@ -54,14 +54,15 @@
                             <td><span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span></td>
                             <td>
                                 @if ($asset->warranty_end_date)
-                                    {{ $asset->warranty_end_date->format('d/m/Y') }}
+                                    {{ hk_date_only($asset->warranty_end_date) }}
                                     @if ($asset->status !== 'disposed')
-                                        @if ($asset->warranty_end_date->lt($warrantyToday))
+                                        @php($warrantyEndDate = \Carbon\Carbon::parse($asset->warranty_end_date->toDateString(), $warrantyToday->timezone))
+                                        @if ($warrantyEndDate->lt($warrantyToday))
                                             <small class="ar-warranty-expired">{{ __('asset-register::asset-register.registry.expired') }}</small>
-                                        @elseif ($asset->warranty_end_date->isSameDay($warrantyToday))
+                                        @elseif ($warrantyEndDate->isSameDay($warrantyToday))
                                             <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.warranty_today') }}</small>
-                                        @elseif ($asset->warranty_end_date->lte($warrantyToday->copy()->addDays(30)))
-                                            <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => $warrantyToday->diffInDays($asset->warranty_end_date)]) }}</small>
+                                        @elseif ($warrantyEndDate->lte($warrantyToday->copy()->addDays(30)))
+                                            <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => \Hki\AssetRegister\Support\AssetWarranty::daysUntil($warrantyEndDate, $warrantyToday)]) }}</small>
                                         @endif
                                     @endif
                                 @else

@@ -15,7 +15,7 @@
     };
     $pendingHandoverHistory = $pendingHandover ? $asset->histories->first(fn ($history) => $history->action === 'handed_over') : null;
 @endphp
-<main class="ar-page ar-detail-page">
+<main class="ar-page ar-detail-page" @if ($canManage) x-data="window.HK.assetRegister.assetFormDialog({ i18n: { saveError: @js(__('asset-register::asset-register.registry.asset_save_error')) } })" @endif>
     <nav class="ar-tabs" aria-label="{{ __('asset-register::asset-register.name') }}">
         @foreach ($tabs as $tab)
             <a href="{{ $tab['url'] }}" @class(['ar-tab', 'is-active' => $activeTab === $tab['key']])>
@@ -24,10 +24,6 @@
             </a>
         @endforeach
     </nav>
-
-    @if (session('success'))
-        <div class="ar-alert ar-alert-success" role="status">{{ session('success') }}</div>
-    @endif
 
     <div class="ar-detail-breadcrumb">
         <a href="{{ $isKeeperView ? route('asset-register.mine') : route('asset-register.registry') }}">{{ $isKeeperView ? __('asset-register::asset-register.tabs.mine') : __('asset-register::asset-register.tabs.registry') }}</a>
@@ -45,7 +41,7 @@
         <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
         <div class="ar-detail-actions">
             @if ($canManage && $asset->status !== 'disposed')
-                <a class="ar-button" href="{{ route('asset-register.assets.edit', $asset->id) }}"><span class="material-symbols-rounded" aria-hidden="true">edit</span>{{ __('asset-register::asset-register.asset_detail.edit') }}</a>
+                <a class="ar-button ar-edit-asset" href="{{ route('asset-register.assets.edit', $asset->id) }}"><span class="material-symbols-rounded" aria-hidden="true">edit</span>{{ __('asset-register::asset-register.asset_detail.edit') }}</a>
                 @if ($asset->status === 'available')
                     <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="handover" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-action-title="{{ __('asset-register::asset-register.actions.handover_title') }}"><span class="material-symbols-rounded" aria-hidden="true">assignment_ind</span>{{ __('asset-register::asset-register.actions.handover') }}</button>
                 @elseif ($asset->status === 'in_use')
@@ -62,7 +58,7 @@
                 @endif
             @elseif ($isKeeperView && $asset->status !== 'disposed')
                 @if ($pendingHandover)
-                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="confirm" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-condition="{{ $pendingHandover->condition_on_handover ? __('asset-register::asset-register.condition.' . $pendingHandover->condition_on_handover) : '—' }}" data-assigned-by="{{ $pendingHandoverHistory?->user?->name }}" data-assigned-at="{{ $pendingHandover->handed_over_at?->format('d/m/Y H:i') }}">{{ __('asset-register::asset-register.mine.confirm_received') }}</button>
+                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="confirm" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-condition="{{ $pendingHandover->condition_on_handover ? __('asset-register::asset-register.condition.' . $pendingHandover->condition_on_handover) : '—' }}" data-assigned-by="{{ $pendingHandoverHistory?->user?->name }}" data-assigned-at="{{ hk_datetime($pendingHandover->handed_over_at) }}">{{ __('asset-register::asset-register.mine.confirm_received') }}</button>
                 @endif
                 <button class="ar-button" type="button" data-ar-open-action-dialog="issue" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" @if ($pendingHandover) data-issue-type="incorrect" @endif>{{ $pendingHandover ? __('asset-register::asset-register.mine.report_incorrect') : __('asset-register::asset-register.mine.report_issue') }}</button>
             @endif
@@ -73,7 +69,7 @@
         <div class="ar-disposal-banner">
             <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
             {{ __('asset-register::asset-register.asset_detail.disposed_notice', [
-                'date' => $asset->disposed_at?->format('d/m/Y') ?? '--',
+                'date' => hk_date($asset->disposed_at) ?? '--',
                 'method' => $asset->disposal_method ?: '--',
                 'basis' => $asset->disposal_basis ?: '--',
                 'code' => $asset->code,
@@ -99,17 +95,19 @@
             <section class="ar-card ar-detail-card">
                 <h2>{{ __('asset-register::asset-register.asset_form.purchase_warranty') }}</h2>
                 <dl class="ar-detail-fields">
-                    <div><dt>{{ __('asset-register::asset-register.asset_form.purchase_date') }}</dt><dd>{{ $asset->purchase_date?->format('d/m/Y') ?? '--' }}</dd></div>
+                    <div><dt>{{ __('asset-register::asset-register.asset_form.purchase_date') }}</dt><dd>{{ hk_date_only($asset->purchase_date) ?? '--' }}</dd></div>
+                    <div><dt>{{ __('asset-register::asset-register.asset_form.warranty_duration') }}</dt><dd>{{ $asset->warranty_duration_months ? __('asset-register::asset-register.asset_form.warranty_duration_value', ['count' => $asset->warranty_duration_months]) : '--' }}</dd></div>
                     <div>
                         <dt>{{ __('asset-register::asset-register.asset_form.warranty_end_date') }}</dt>
-                        <dd>{{ $asset->warranty_end_date?->format('d/m/Y') ?? '--' }}
+                        <dd>{{ hk_date_only($asset->warranty_end_date) ?? '--' }}
                             @if ($asset->status !== 'disposed' && $asset->warranty_end_date)
-                                @if ($asset->warranty_end_date->lt($warrantyToday))
+                                @php($warrantyEndDate = \Carbon\Carbon::parse($asset->warranty_end_date->toDateString(), $warrantyToday->timezone))
+                                @if ($warrantyEndDate->lt($warrantyToday))
                                     <small class="ar-warranty-expired">{{ __('asset-register::asset-register.registry.expired') }}</small>
-                                @elseif ($asset->warranty_end_date->isSameDay($warrantyToday))
+                                @elseif ($warrantyEndDate->isSameDay($warrantyToday))
                                     <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.warranty_today') }}</small>
-                                @elseif ($asset->warranty_end_date->lte($warrantyToday->copy()->addDays(30)))
-                                    <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => $warrantyToday->diffInDays($asset->warranty_end_date)]) }}</small>
+                                @elseif ($warrantyEndDate->lte($warrantyToday->copy()->addDays(30)))
+                                    <small class="ar-warranty-warning">{{ __('asset-register::asset-register.registry.days_remaining', ['count' => \Hki\AssetRegister\Support\AssetWarranty::daysUntil($warrantyEndDate, $warrantyToday)]) }}</small>
                                 @endif
                             @endif
                         </dd>
@@ -121,29 +119,31 @@
 
             <section class="ar-card ar-detail-card">
                 <h2>{{ __('asset-register::asset-register.asset_detail.history') }}@if ($isKeeperView) ({{ __('asset-register::asset-register.tabs.mine') }})@endif</h2>
-                @forelse ($asset->histories as $history)
-                    @php($historyData = json_decode((string) $history->description, true))
-                    <div class="ar-history-row">
-                        <span class="ar-history-icon material-symbols-rounded" aria-hidden="true">{{ $history->action === 'added' ? 'add' : 'history' }}</span>
-                        <div>
-                            <strong>{{ __('asset-register::asset-register.history_actions.' . $history->action) }}</strong>
-                            <small>{{ $history->created_at?->format('d/m/Y H:i') }} · {{ $history->user?->name ?: __('asset-register::asset-register.asset_detail.system_actor') }}</small>
-                            @if ($history->action === 'updated' && is_array($historyData))
-                                <ul class="ar-history-changes">
-                                    @foreach ($historyData as $field => $change)
-                                        <li>{{ __('asset-register::asset-register.asset_fields.' . $field) }}: {{ $change['old'] ?? '--' }} → {{ $change['new'] ?? '--' }}</li>
-                                    @endforeach
-                                </ul>
-                            @elseif ($historyData && isset($historyData['code']))
-                                <small>{{ $historyData['code'] }}</small>
-                            @elseif ($history->description)
-                                <small>{{ $history->description }}</small>
-                            @endif
+                <div class="ar-history-list" role="region" aria-label="{{ __('asset-register::asset-register.asset_detail.history') }}" tabindex="0">
+                    @forelse ($asset->histories as $history)
+                        @php($historyData = json_decode((string) $history->description, true))
+                        <div class="ar-history-row">
+                            <span class="ar-history-icon material-symbols-rounded" aria-hidden="true">{{ $history->action === 'added' ? 'add' : 'history' }}</span>
+                            <div>
+                                <strong>{{ __('asset-register::asset-register.history_actions.' . $history->action) }}</strong>
+                                <small>{{ hk_datetime($history->created_at) }} · {{ $history->user?->name ?: __('asset-register::asset-register.asset_detail.system_actor') }}</small>
+                                @if ($history->action === 'updated' && is_array($historyData))
+                                    <ul class="ar-history-changes">
+                                        @foreach ($historyData as $field => $change)
+                                            <li>{{ __('asset-register::asset-register.asset_fields.' . $field) }}: {{ $change['old'] ?? '--' }} → {{ $change['new'] ?? '--' }}</li>
+                                        @endforeach
+                                    </ul>
+                                @elseif ($historyData && isset($historyData['code']))
+                                    <small>{{ $historyData['code'] }}</small>
+                                @elseif ($history->description)
+                                    <small>{{ $history->description }}</small>
+                                @endif
+                            </div>
                         </div>
-                    </div>
-                @empty
-                    <p class="ar-empty">{{ __('asset-register::asset-register.asset_detail.no_history') }}</p>
-                @endforelse
+                    @empty
+                        <p class="ar-empty">{{ __('asset-register::asset-register.asset_detail.no_history') }}</p>
+                    @endforelse
+                </div>
             </section>
         </div>
 
@@ -157,7 +157,7 @@
                 @endif
                 @if ($pendingHandover)
                     <div class="ar-pending-note">
-                        {{ __('asset-register::asset-register.asset_detail.pending_since', ['date' => $pendingHandover->handed_over_at?->format('d/m/Y H:i') ?? '--']) }}
+                        {{ __('asset-register::asset-register.asset_detail.pending_since', ['date' => hk_datetime($pendingHandover->handed_over_at) ?? '--']) }}
                     </div>
                 @endif
             </section>
@@ -173,7 +173,7 @@
                     <div class="ar-handover-row">
                         <span class="material-symbols-rounded ar-type-icon" aria-hidden="true">assignment_ind</span>
                         <span>{{ $handover->recipient?->name ?: '--' }}
-                            <small>{{ __('asset-register::asset-register.asset_detail.handover_at', ['date' => $handover->handed_over_at?->format('d/m/Y H:i') ?? '--']) }} · {{ __('asset-register::asset-register.handover_status.' . $handover->status) }}</small>
+                            <small>{{ __('asset-register::asset-register.asset_detail.handover_at', ['date' => hk_datetime($handover->handed_over_at) ?? '--']) }} · {{ __('asset-register::asset-register.handover_status.' . $handover->status) }}</small>
                             @if ($handover->condition_on_handover)
                                 <small>{{ __('asset-register::asset-register.asset_form.condition') }}: {{ __('asset-register::asset-register.condition.' . $handover->condition_on_handover) }}</small>
                             @endif
@@ -192,6 +192,9 @@
             @endif
         </aside>
     </div>
+    @if ($canManage)
+        @include('asset-register::asset-register.partials.asset-form-dialog')
+    @endif
 </main>
 @include('asset-register::asset-register.action-dialogs')
 @endsection

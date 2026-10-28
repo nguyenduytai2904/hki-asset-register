@@ -37,6 +37,38 @@ final class AssetRegistryTest extends TestCase
         self::assertCount(1, $response->viewData('assets'));
     }
 
+    public function test_registry_sorts_status_and_warranty_and_accepts_page_size(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
+        $typeId = $this->insertType((int) $account->id);
+        $inUseId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001', 'in_use');
+        $availableId = $this->insertAsset((int) $account->id, $typeId, 'LT-0002', 'available');
+        $brokenId = $this->insertAsset((int) $account->id, $typeId, 'LT-0003', 'broken');
+        DB::table('asset_register_assets')->where('id', $inUseId)->update(['warranty_end_date' => '2026-12-20']);
+        DB::table('asset_register_assets')->where('id', $availableId)->update(['warranty_end_date' => '2026-11-20']);
+
+        $statusResponse = $this->actingAs($actor)->get(route('asset-register.registry', [
+            'sort_by' => 'status',
+            'sort_dir' => 'asc',
+            'per_page' => 30,
+        ]));
+        self::assertSame(
+            [$availableId, $inUseId, $brokenId],
+            $statusResponse->viewData('assets')->getCollection()->modelKeys(),
+        );
+        self::assertSame(30, $statusResponse->viewData('assets')->perPage());
+
+        $warrantyResponse = $this->actingAs($actor)->get(route('asset-register.registry', [
+            'sort_by' => 'warranty',
+            'sort_dir' => 'asc',
+            'per_page' => 30,
+        ]));
+        self::assertSame(
+            [$availableId, $inUseId, $brokenId],
+            $warrantyResponse->viewData('assets')->getCollection()->modelKeys(),
+        );
+    }
+
     public function test_registry_search_and_filters_return_only_matching_assets(): void
     {
         [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
@@ -155,6 +187,229 @@ final class AssetRegistryTest extends TestCase
             ->assertSessionHasErrors(['code', 'warranty_end_date']);
     }
 
+    public function test_asset_creation_requires_business_fields_and_iso_date_values(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+        $payload = $this->assetPayload($typeId);
+        unset($payload['asset_type_id'], $payload['name'], $payload['condition']);
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), $payload)
+            ->assertSessionHasErrors(['asset_type_id', 'name', 'condition']);
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), array_replace($this->assetPayload($typeId), [
+                'purchase_date' => '05/04/2025',
+                'warranty_end_date' => '2026-04-05',
+            ]))
+            ->assertSessionHasErrors('purchase_date');
+    }
+
+    public function test_asset_creation_enforces_documented_text_field_limits(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), array_replace($this->assetPayload($typeId), [
+                'name' => str_repeat('n', 151),
+                'brand' => str_repeat('b', 101),
+                'model' => str_repeat('m', 101),
+                'serial' => str_repeat('s', 101),
+                'configuration' => str_repeat('c', 2001),
+                'supplier' => str_repeat('s', 151),
+                'receipt_number' => str_repeat('r', 101),
+                'note' => str_repeat('n', 2001),
+            ]))
+            ->assertSessionHasErrors([
+                'name',
+                'brand',
+                'model',
+                'serial',
+                'configuration',
+                'supplier',
+                'receipt_number',
+                'note',
+            ]);
+    }
+
+    public function test_asset_creation_rejects_a_code_already_used_in_the_account(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+        $this->insertAsset((int) $account->id, $typeId, 'LT-0001');
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), array_replace($this->assetPayload($typeId), [
+                'code' => 'lt-0001',
+            ]))
+            ->assertSessionHasErrors('code');
+    }
+
+    public function test_asset_create_dialog_and_edit_dialog_use_the_same_date_fields(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001');
+        DB::table('asset_register_assets')->where('id', $assetId)->update([
+            'purchase_date' => '2025-04-05',
+            'warranty_end_date' => '2026-04-05',
+            'warranty_duration_months' => 24,
+        ]);
+
+        $this->actingAs($actor)
+            ->get(route('asset-register.registry'))
+            ->assertOk()
+            ->assertSee('id="ar-asset-form-dialog"', false)
+            ->assertSee('class="ar-button ar-button-dark ar-add-asset"', false);
+
+        $createForm = $this->actingAs($actor)
+            ->get(route('asset-register.assets.create'))
+            ->assertOk();
+        $createForm->assertSee('name="purchase_date"', false)
+            ->assertSee('name="warranty_end_date"', false)
+            ->assertSee('name="warranty_duration_preset"', false)
+            ->assertSee('name="warranty_duration_custom_months"', false)
+            ->assertSee('data-hk-datepicker="date"', false);
+
+        $detail = $this->actingAs($actor)
+            ->get(route('asset-register.assets.show', $assetId))
+            ->assertOk();
+        $detail->assertSee('class="ar-button ar-edit-asset"', false)
+            ->assertSee('id="ar-asset-form-dialog"', false)
+            ->assertSee('24 tháng');
+
+        $this->actingAs($actor)
+            ->get(route('asset-register.assets.edit', $assetId))
+            ->assertOk()
+            ->assertSee('value="2025-04-05"', false)
+            ->assertSee('value="2026-04-05"', false)
+            ->assertSee('value="24"', false)
+            ->assertSee('name="warranty_duration_preset"', false)
+            ->assertSee('value="LT-0001" readonly', false);
+    }
+
+    public function test_asset_creation_calculates_warranty_duration_from_purchase_date_and_allows_override(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+
+        $this->actingAs($actor)->post(route('asset-register.assets.store'), array_replace(
+            $this->assetPayload($typeId),
+            [
+                'code' => 'LT-0200',
+                'purchase_date' => '2025-01-31',
+                'warranty_duration_preset' => '3',
+                'warranty_duration_months' => '',
+                'warranty_end_date' => '',
+            ],
+        ))->assertRedirect();
+
+        $this->assertDatabaseHas('asset_register_assets', [
+            'account_id' => $account->id,
+            'code' => 'LT-0200',
+            'purchase_date' => '2025-01-31',
+            'warranty_duration_months' => 3,
+            'warranty_end_date' => '2025-04-30',
+        ]);
+
+        $this->actingAs($actor)->post(route('asset-register.assets.store'), array_replace(
+            $this->assetPayload($typeId),
+            [
+                'code' => 'LT-0201',
+                'purchase_date' => '2025-01-31',
+                'warranty_duration_preset' => 'custom',
+                'warranty_duration_custom_months' => '18',
+                'warranty_duration_months' => '',
+                'warranty_end_date' => '2026-03-15',
+            ],
+        ))->assertRedirect();
+
+        $this->assertDatabaseHas('asset_register_assets', [
+            'account_id' => $account->id,
+            'code' => 'LT-0201',
+            'warranty_duration_months' => 18,
+            'warranty_end_date' => '2026-03-15',
+        ]);
+    }
+
+    public function test_selected_warranty_duration_requires_a_purchase_date(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), array_replace($this->assetPayload($typeId), [
+                'code' => 'LT-0200',
+                'warranty_duration_preset' => '3',
+                'warranty_duration_months' => '',
+            ]))
+            ->assertSessionHasErrors('purchase_date');
+
+        $this->actingAs($actor)
+            ->post(route('asset-register.assets.store'), array_replace($this->assetPayload($typeId), [
+                'code' => 'LT-0201',
+                'purchase_date' => '2025-01-31',
+                'warranty_duration_preset' => 'custom',
+                'warranty_duration_custom_months' => '0',
+            ]))
+            ->assertSessionHasErrors('warranty_duration_custom_months');
+
+        self::assertDatabaseMissing('asset_register_assets', [
+            'account_id' => $account->id,
+            'code' => 'LT-0200',
+        ]);
+    }
+
+    public function test_asset_creation_saves_purchase_and_warranty_dates_with_one_history_entry(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+
+        $response = $this->actingAs($actor)->post(
+            route('asset-register.assets.store'),
+            array_replace($this->assetPayload($typeId), [
+                'code' => 'LT-0100',
+                'purchase_date' => '2025-04-05',
+                'warranty_end_date' => '2026-04-05',
+            ]),
+        );
+
+        $assetId = (int) DB::table('asset_register_assets')->where('account_id', $account->id)->value('id');
+        $response->assertRedirect(route('asset-register.assets.show', $assetId));
+        $this->assertDatabaseHas('asset_register_assets', [
+            'id' => $assetId,
+            'purchase_date' => '2025-04-05',
+            'warranty_end_date' => '2026-04-05',
+        ]);
+        self::assertSame(1, DB::table('asset_register_histories')
+            ->where('asset_id', $assetId)
+            ->where('action', 'added')
+            ->count());
+    }
+
     public function test_asset_create_and_edit_forms_warn_against_personal_data_in_notes(): void
     {
         [$actor, $account] = $this->actorWithPermissions([
@@ -209,6 +464,102 @@ final class AssetRegistryTest extends TestCase
         ], json_decode($history->description, true, flags: JSON_THROW_ON_ERROR));
     }
 
+    public function test_asset_update_saves_purchase_and_warranty_dates_and_logs_old_and_new_values(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001');
+        DB::table('asset_register_assets')->where('id', $assetId)->update([
+            'purchase_date' => '2025-04-05',
+            'warranty_end_date' => '2026-04-05',
+        ]);
+
+        $response = $this->actingAs($actor)->put(
+            route('asset-register.assets.update', $assetId),
+            array_replace($this->assetPayload($typeId), [
+                'code' => 'CHANGED',
+                'purchase_date' => '2025-05-06',
+                'warranty_duration_preset' => '12',
+                'warranty_duration_months' => '',
+                'warranty_end_date' => '2026-05-06',
+            ]),
+        );
+
+        $response->assertRedirect(route('asset-register.assets.show', $assetId));
+        $this->assertDatabaseHas('asset_register_assets', [
+            'id' => $assetId,
+            'code' => 'LT-0001',
+            'purchase_date' => '2025-05-06',
+            'warranty_duration_months' => 12,
+            'warranty_end_date' => '2026-05-06',
+        ]);
+        $history = DB::table('asset_register_histories')
+            ->where('asset_id', $assetId)
+            ->where('action', 'updated')
+            ->sole();
+        self::assertSame([
+            'purchase_date' => ['old' => '2025-04-05', 'new' => '2025-05-06'],
+            'warranty_end_date' => ['old' => '2026-04-05', 'new' => '2026-05-06'],
+            'warranty_duration_months' => ['old' => null, 'new' => '12'],
+        ], json_decode($history->description, true, flags: JSON_THROW_ON_ERROR));
+    }
+
+    public function test_asset_update_can_change_type_without_changing_its_asset_code(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $oldTypeId = $this->insertType((int) $account->id, name: 'Laptop', prefix: 'LT');
+        $newTypeId = $this->insertType((int) $account->id, name: 'Computer', prefix: 'PC');
+        $assetId = $this->insertAsset((int) $account->id, $oldTypeId, 'LT-0001');
+
+        $this->actingAs($actor)
+            ->put(route('asset-register.assets.update', $assetId), array_replace(
+                $this->assetPayload($newTypeId),
+                ['code' => 'PC-0001'],
+            ))
+            ->assertRedirect(route('asset-register.assets.show', $assetId));
+
+        $this->assertDatabaseHas('asset_register_assets', [
+            'id' => $assetId,
+            'asset_type_id' => $newTypeId,
+            'code' => 'LT-0001',
+        ]);
+        $history = DB::table('asset_register_histories')
+            ->where('asset_id', $assetId)
+            ->where('action', 'updated')
+            ->sole();
+        self::assertSame([
+            'asset_type_id' => ['old' => 'Laptop', 'new' => 'Computer'],
+        ], json_decode($history->description, true, flags: JSON_THROW_ON_ERROR));
+    }
+
+    public function test_asset_update_rejects_warranty_end_date_before_purchase_date(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001');
+
+        $this->actingAs($actor)
+            ->put(route('asset-register.assets.update', $assetId), array_replace($this->assetPayload($typeId), [
+                'purchase_date' => '2026-10-20',
+                'warranty_end_date' => '2026-10-19',
+            ]))
+            ->assertSessionHasErrors('warranty_end_date');
+
+        self::assertSame(0, DB::table('asset_register_histories')
+            ->where('asset_id', $assetId)
+            ->where('action', 'updated')
+            ->count());
+    }
+
     public function test_asset_update_rejects_switching_to_an_inactive_catalog_value(): void
     {
         [$actor, $account] = $this->actorWithPermissions([
@@ -244,6 +595,38 @@ final class AssetRegistryTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_registry_viewer_cannot_open_or_submit_asset_edits(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001');
+
+        $this->actingAs($actor)
+            ->get(route('asset-register.assets.edit', $assetId))
+            ->assertForbidden();
+        $this->actingAs($actor)
+            ->put(route('asset-register.assets.update', $assetId), $this->assetPayload($typeId))
+            ->assertForbidden();
+    }
+
+    public function test_manager_cannot_open_or_update_an_asset_owned_by_another_account(): void
+    {
+        [$actor] = $this->actorWithPermissions([
+            'asset-register.assets.view',
+            'asset-register.assets.manage',
+        ]);
+        [, $otherAccount] = $this->makeAccountWithFullAccessOwner('foreign asset edit');
+        $typeId = $this->insertType((int) $otherAccount->id);
+        $assetId = $this->insertAsset((int) $otherAccount->id, $typeId, 'LT-0001');
+
+        $this->actingAs($actor)
+            ->get(route('asset-register.assets.edit', $assetId))
+            ->assertNotFound();
+        $this->actingAs($actor)
+            ->put(route('asset-register.assets.update', $assetId), $this->assetPayload($typeId))
+            ->assertNotFound();
+    }
+
     public function test_authorized_asset_detail_marks_notifications_read(): void
     {
         [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
@@ -259,7 +642,10 @@ final class AssetRegistryTest extends TestCase
 
         $this->actingAs($actor)
             ->get(route('asset-register.assets.show', $assetId))
-            ->assertOk();
+            ->assertOk()
+            ->assertSee('class="ar-history-list"', false)
+            ->assertSee('role="region"', false)
+            ->assertSee('tabindex="0"', false);
     }
 
     public function test_keeper_can_see_only_own_asset_history_and_handovers(): void
@@ -313,6 +699,7 @@ final class AssetRegistryTest extends TestCase
         $response = $this->actingAs($keeper)->get(route('asset-register.assets.show', $assetId));
 
         $response->assertOk()
+            ->assertSee('class="ar-history-list"', false)
             ->assertSee('KEEPER_VISIBLE_HISTORY')
             ->assertDontSee('PRIVATE_MANAGER_HISTORY')
             ->assertDontSee('Unrelated Recipient')
@@ -326,6 +713,53 @@ final class AssetRegistryTest extends TestCase
         $this->actingAs($unrelated)
             ->get(route('asset-register.assets.show', $assetId))
             ->assertForbidden();
+    }
+
+    public function test_pending_recipient_can_open_details_without_manager_only_notes_or_history(): void
+    {
+        [$recipient, $account] = $this->actorWithPermissions(['asset-register.self.use']);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001', 'in_use');
+        DB::table('asset_register_assets')->where('id', $assetId)->update([
+            'note' => 'MANAGER_ONLY_ASSET_NOTE',
+        ]);
+        DB::table('asset_register_handovers')->insert([
+            'account_id' => $account->id,
+            'asset_id' => $assetId,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+            'handed_over_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('asset_register_histories')->insert([
+            'account_id' => $account->id,
+            'asset_id' => $assetId,
+            'user_id' => $recipient->id,
+            'action' => 'reported',
+            'description' => 'RECIPIENT_VISIBLE_HISTORY',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $manager = User::factory()->create();
+        DB::table('asset_register_histories')->insert([
+            'account_id' => $account->id,
+            'asset_id' => $assetId,
+            'user_id' => $manager->id,
+            'action' => 'updated',
+            'description' => 'MANAGER_ONLY_HISTORY',
+            'created_at' => now()->subMinute(),
+            'updated_at' => now()->subMinute(),
+        ]);
+
+        $this->actingAs($recipient)
+            ->get(route('asset-register.assets.show', $assetId))
+            ->assertOk()
+            ->assertSee(__('asset-register::asset-register.mine.confirm_received'))
+            ->assertSee('RECIPIENT_VISIBLE_HISTORY')
+            ->assertDontSee('MANAGER_ONLY_HISTORY')
+            ->assertDontSee('MANAGER_ONLY_ASSET_NOTE')
+            ->assertDontSee('ar-edit-asset');
     }
 
     public function test_asset_from_another_account_is_not_visible(): void

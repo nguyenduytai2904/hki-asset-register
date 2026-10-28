@@ -132,6 +132,7 @@ final class AssetRegisterSchema
             $table->string('status', 30);
             $table->unsignedBigInteger('current_keeper_id')->nullable();
             $table->date('warranty_end_date')->nullable();
+            $table->unsignedSmallInteger('warranty_duration_months')->nullable();
             $table->date('purchase_date')->nullable();
             $table->text('configuration')->nullable();
             $table->string('supplier', 150)->nullable();

@@ -14,6 +14,26 @@ final class AssetCatalogTest extends TestCase
 {
     use InteractsWithAssetRegister;
 
+    public function test_catalog_row_actions_open_edit_dialogs_and_success_uses_no_inline_banner(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions($this->managerPermissions());
+        $typeId = $this->insertType((int) $account->id, 'Laptop', 'LT');
+        $locationId = $this->insertLocation((int) $account->id, 'Server room');
+
+        $this->actingAs($actor)
+            ->withSession(['success' => 'Catalog item deleted.'])
+            ->get(route('asset-register.settings'))
+            ->assertOk()
+            ->assertSee('data-ar-open-dialog="ar-edit-type-'.$typeId.'-dialog"', false)
+            ->assertSee('id="ar-edit-type-'.$typeId.'-dialog"', false)
+            ->assertSee('data-ar-open-dialog="ar-edit-location-'.$locationId.'-dialog"', false)
+            ->assertSee('id="ar-edit-location-'.$locationId.'-dialog"', false)
+            ->assertSee('name="_asset_register_dialog" value="edit-type-'.$typeId.'"', false)
+            ->assertSee('name="_asset_register_dialog" value="edit-location-'.$locationId.'"', false)
+            ->assertDontSee('<details', false)
+            ->assertDontSee('class="ar-alert ar-alert-success"', false);
+    }
+
     public function test_manager_can_create_and_update_an_asset_type(): void
     {
         [$actor, $account] = $this->actorWithPermissions($this->managerPermissions());
