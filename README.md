@@ -67,8 +67,11 @@ demo-data command refuses to run in `production`.
 
 Plugin-owned tables use the `asset_register_` prefix and are declared in
 `AssetRegisterSchema`. Both migrations and the plugin installer use this schema
-owner. A compatibility migration renames earlier unprefixed development tables
-and adds account ownership to existing handover and history records.
+owner. Before the first release, the migration history is represented by one
+baseline migration. It is not an upgrade path for databases created by earlier
+development migrations: the baseline stops if it finds unprefixed legacy tables.
+Back up and plan any required migration or deliberate development-database reset
+before applying it; never use `migrate:fresh` on a database containing data.
 
 ## System dependencies
 
