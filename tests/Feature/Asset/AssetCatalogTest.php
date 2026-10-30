@@ -20,6 +20,7 @@ final class AssetCatalogTest extends TestCase
         $this->actingAs($actor)
             ->get(route('asset-register.settings'))
             ->assertOk()
+            ->assertSee('window.HK.assetRegister.settingsPage', false)
             ->assertSee('data-ar-first-code', false)
             ->assertSee(__('asset-register::asset-register.settings.first_code_preview'));
 
