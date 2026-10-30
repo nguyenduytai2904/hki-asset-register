@@ -23,6 +23,7 @@ trait InteractsWithAssetRegister
         [$owner, $account] = $this->makeAccountWithFullAccessOwner($label);
         [$actor] = $this->addMemberWithPermissions($account, $permissions, $label.' actor');
 
+        $this->makeActiveSubscription($account);
         $this->activatePluginFor($account, $owner);
         AccountContext::force((int) $account->id);
 

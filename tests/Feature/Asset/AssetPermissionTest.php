@@ -98,6 +98,7 @@ final class AssetPermissionTest extends TestCase
         $this->requirePlugin(AssetRegisterModule::CODE);
         [, $account] = $this->makeAccountWithFullAccessOwner('ungranted');
         [$actor] = $this->addMemberWithPermissions($account, ['asset-register.assets.manage'], 'ungranted actor');
+        $this->makeActiveSubscription($account);
         AccountPlugin::query()->where('plugin_code', AssetRegisterModule::CODE)->delete();
         Plugin::query()->where('code', AssetRegisterModule::CODE)->delete();
         AccountContext::force((int) $account->id);

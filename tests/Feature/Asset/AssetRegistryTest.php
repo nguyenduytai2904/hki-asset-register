@@ -37,6 +37,62 @@ final class AssetRegistryTest extends TestCase
         self::assertCount(1, $response->viewData('assets'));
     }
 
+    public function test_registry_shows_the_latest_status_reason_on_desktop_only(): void
+    {
+        [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
+        $typeId = $this->insertType((int) $account->id);
+        $assetId = $this->insertAsset((int) $account->id, $typeId, 'LT-0001', 'in_repair');
+        $assetWithoutStatusChangeId = $this->insertAsset((int) $account->id, $typeId, 'LT-0002');
+
+        DB::table('asset_register_histories')->insert([
+            [
+                'account_id' => $account->id,
+                'asset_id' => $assetId,
+                'user_id' => $actor->id,
+                'action' => 'status_changed',
+                'description' => json_encode([
+                    'from' => 'available',
+                    'to' => 'in_repair',
+                    'reason' => 'Older status reason',
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => now()->subMinute(),
+                'updated_at' => now()->subMinute(),
+            ],
+            [
+                'account_id' => $account->id,
+                'asset_id' => $assetId,
+                'user_id' => $actor->id,
+                'action' => 'status_changed',
+                'description' => json_encode([
+                    'from' => 'broken',
+                    'to' => 'in_repair',
+                    'reason' => 'Latest status reason',
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $response = $this->actingAs($actor)->get(route('asset-register.registry'));
+
+        $response->assertOk()
+            ->assertSee('data-ar-registry-status-change', false)
+            ->assertSee('id="ar-registry-status-change-'.$assetId.'"', false)
+            ->assertSee('Latest status reason')
+            ->assertDontSee('Older status reason');
+
+        $content = (string) $response->getContent();
+        self::assertSame(1, substr_count($content, 'data-ar-registry-status-change'));
+        preg_match('/<section class="ar-registry-cards".*?<\\/section>/s', $content, $mobileCards);
+        self::assertArrayHasKey(0, $mobileCards);
+        self::assertStringNotContainsString('data-ar-registry-status-change', $mobileCards[0]);
+        self::assertStringNotContainsString('Latest status reason', $mobileCards[0]);
+        self::assertStringNotContainsString(
+            'id="ar-registry-status-change-'.$assetWithoutStatusChangeId.'"',
+            $content,
+        );
+    }
+
     public function test_registry_sorts_status_and_warranty_and_accepts_page_size(): void
     {
         [$actor, $account] = $this->actorWithPermissions(['asset-register.assets.view']);
@@ -755,7 +811,8 @@ final class AssetRegistryTest extends TestCase
         $this->actingAs($recipient)
             ->get(route('asset-register.assets.show', $assetId))
             ->assertOk()
-            ->assertSee(__('asset-register::asset-register.mine.confirm_received'))
+            ->assertDontSee(__('asset-register::asset-register.mine.confirm_received'))
+            ->assertDontSee('data-ar-open-action-dialog', false)
             ->assertSee('RECIPIENT_VISIBLE_HISTORY')
             ->assertDontSee('MANAGER_ONLY_HISTORY')
             ->assertDontSee('MANAGER_ONLY_ASSET_NOTE')
