@@ -8,6 +8,6 @@ MINOR — Phát hành các use case UC-001–UC-003.
 - **Tính năng**: điều hướng và phân quyền; quản lý loại tài sản và vị trí; trang “Của tôi” hiển thị trạng thái trống cho đến khi UC-008 được triển khai.
 - **Lược đồ**: sở hữu năm bảng `asset_register_*`; một migration nền duy nhất tạo lược đồ từ `AssetRegisterSchema`.
 - **Cấu hình máy chủ**: không yêu cầu cấu hình mới.
-- **Ghi chú triển khai**: cài package, chạy `php artisan package:discover`, `php artisan migrate`, sau đó `php artisan plugin:sync --prune` và grant plugin cho account cần dùng.
-- **Không tương thích**: không; UC-004–UC-007 chưa được phát hành trong phiên bản này.
+- **Ghi chú triển khai**: cài package, chạy `php artisan package:discover`, `php artisan migrate`, sau đó `php artisan plugin:sync --prune` và grant plugin cho account cần dùng; sao lưu và xử lý có chủ đích DB phát triển trước khi áp dụng migration nền.
+- **Không tương thích**: không hỗ trợ nâng cấp trực tiếp DB từ migration phát triển cũ; UC-004–UC-007 chưa được phát hành trong phiên bản này.
 - **Kiểm thử**: 17 Asset plugin tests (114 assertions) và `php artisan route:list --path=asset-register`.
