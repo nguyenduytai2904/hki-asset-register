@@ -6,14 +6,7 @@
 @php
     $pendingHandover = $asset->handovers->first(fn ($handover) => $handover->status === 'pending' && $handover->closed_at === null);
     $statusKey = $pendingHandover ? 'pending' : ($asset->status === 'pending_confirmation' ? 'pending' : $asset->status);
-    $statusOptions = match ($asset->status) {
-        'available', 'in_use' => ['in_repair', 'broken', 'lost'],
-        'in_repair' => ['available', 'broken'],
-        'broken' => ['available', 'in_repair'],
-        'lost' => ['available'],
-        default => [],
-    };
-    $pendingHandoverHistory = $pendingHandover ? $asset->histories->first(fn ($history) => $history->action === 'handed_over') : null;
+    $statusOptions = $allowedStatusTransitions;
 @endphp
 <main class="ar-page ar-detail-page" @if ($canManage) x-data="window.HK.assetRegister.assetFormDialog({ i18n: { saveError: @js(__('asset-register::asset-register.registry.asset_save_error')) } })" @endif>
     <nav class="ar-tabs" aria-label="{{ __('asset-register::asset-register.name') }}">
@@ -25,6 +18,10 @@
         @endforeach
     </nav>
 
+    @if (session('success'))
+        <div class="ar-alert ar-alert-success" role="status">{{ session('success') }}</div>
+    @endif
+
     <div class="ar-detail-breadcrumb">
         <a href="{{ $isKeeperView ? route('asset-register.mine') : route('asset-register.registry') }}">{{ $isKeeperView ? __('asset-register::asset-register.tabs.mine') : __('asset-register::asset-register.tabs.registry') }}</a>
         <span>/</span>{{ $asset->code }}
@@ -35,10 +32,25 @@
         </a>
         <span class="ar-device-icon ar-detail-icon"><span class="material-symbols-rounded" aria-hidden="true">{{ $asset->type?->displayIcon() ?: 'category' }}</span></span>
         <div class="ar-detail-title">
-            <h1>{{ $asset->code }} · {{ $asset->name }}</h1>
+            <h1>
+                {{ $asset->code }} · {{ $asset->name }}
+                <span class="ar-detail-status-group">
+                    @if ($latestStatusChange)
+                        <span class="ar-status-reason" tabindex="0" aria-describedby="ar-latest-status-change">
+                            <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
+                            <span class="ar-status-reason-tooltip" id="ar-latest-status-change" role="tooltip" data-ar-latest-status-change>
+                                <strong>{{ __('asset-register::asset-register.actions.latest_status_change') }}</strong>
+                                <p>{{ __('asset-register::asset-register.asset_status.' . $latestStatusChange['from']) }} → {{ __('asset-register::asset-register.asset_status.' . $latestStatusChange['to']) }}</p>
+                                <p><strong>{{ __('asset-register::asset-register.actions.reason') }}:</strong> {{ $latestStatusChange['reason'] }}</p>
+                            </span>
+                        </span>
+                    @else
+                        <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
+                    @endif
+                </span>
+            </h1>
             <p>{{ $asset->type?->name ?: '--' }} · {{ $asset->location?->name ?: '--' }}</p>
         </div>
-        <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
         <div class="ar-detail-actions">
             @if ($canManage && $asset->status !== 'disposed')
                 <a class="ar-button ar-edit-asset" href="{{ route('asset-register.assets.edit', $asset->id) }}"><span class="material-symbols-rounded" aria-hidden="true">edit</span>{{ __('asset-register::asset-register.asset_detail.edit') }}</a>
@@ -54,13 +66,8 @@
                 @if ($asset->status === 'in_use')
                     <button class="ar-button ar-button-danger" type="button" disabled title="{{ __('asset-register::asset-register.actions.return_before_disposal') }}">{{ __('asset-register::asset-register.actions.dispose') }}</button>
                 @elseif ($asset->status !== 'disposed')
-                    <button class="ar-button ar-button-danger" type="button" data-ar-open-action-dialog="dispose" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-purchase-date="{{ $asset->purchase_date?->format('Y-m-d') }}">{{ __('asset-register::asset-register.actions.dispose') }}</button>
+                    <button class="ar-button ar-button-danger" type="button" data-ar-open-action-dialog="dispose" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-purchase-date="{{ $asset->purchase_date?->format('Y-m-d') }}" data-today="{{ $warrantyToday->toDateString() }}">{{ __('asset-register::asset-register.actions.dispose') }}</button>
                 @endif
-            @elseif ($isKeeperView && $asset->status !== 'disposed')
-                @if ($pendingHandover)
-                    <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="confirm" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" data-condition="{{ $pendingHandover->condition_on_handover ? __('asset-register::asset-register.condition.' . $pendingHandover->condition_on_handover) : '—' }}" data-assigned-by="{{ $pendingHandoverHistory?->user?->name }}" data-assigned-at="{{ hk_datetime($pendingHandover->handed_over_at) }}">{{ __('asset-register::asset-register.mine.confirm_received') }}</button>
-                @endif
-                <button class="ar-button" type="button" data-ar-open-action-dialog="issue" data-code="{{ $asset->code }}" data-name="{{ $asset->name }}" @if ($pendingHandover) data-issue-type="incorrect" @endif>{{ $pendingHandover ? __('asset-register::asset-register.mine.report_incorrect') : __('asset-register::asset-register.mine.report_issue') }}</button>
             @endif
         </div>
     </header>
@@ -70,7 +77,9 @@
             <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
             {{ __('asset-register::asset-register.asset_detail.disposed_notice', [
                 'date' => hk_date($asset->disposed_at) ?? '--',
-                'method' => $asset->disposal_method ?: '--',
+                'method' => $asset->disposal_method
+                    ? __('asset-register::asset-register.actions.method_' . $asset->disposal_method)
+                    : '--',
                 'basis' => $asset->disposal_basis ?: '--',
                 'code' => $asset->code,
             ]) }}
@@ -133,6 +142,12 @@
                                             <li>{{ __('asset-register::asset-register.asset_fields.' . $field) }}: {{ $change['old'] ?? '--' }} → {{ $change['new'] ?? '--' }}</li>
                                         @endforeach
                                     </ul>
+                                @elseif ($history->action === 'status_changed' && is_array($historyData) && isset($historyData['from'], $historyData['to'], $historyData['reason']))
+                                    <small>{{ __('asset-register::asset-register.asset_status.' . $historyData['from']) }} → {{ __('asset-register::asset-register.asset_status.' . $historyData['to']) }}</small>
+                                    <small class="ar-history-reason"><strong>{{ __('asset-register::asset-register.actions.reason') }}:</strong> {{ $historyData['reason'] }}</small>
+                                @elseif ($history->action === 'disposed' && is_array($historyData) && isset($historyData['disposed_at'], $historyData['method'], $historyData['basis']))
+                                    <small>{{ hk_date_only($historyData['disposed_at']) }} · {{ __('asset-register::asset-register.actions.method_' . $historyData['method']) }}</small>
+                                    <small>{{ $historyData['basis'] }}</small>
                                 @elseif ($historyData && isset($historyData['code']))
                                     <small>{{ $historyData['code'] }}</small>
                                 @elseif ($history->description)
@@ -149,10 +164,15 @@
 
         <aside class="ar-detail-side">
             <section class="ar-card ar-detail-card">
-                <h2>{{ $isKeeperView ? __('asset-register::asset-register.asset_detail.you_are_keeper') : __('asset-register::asset-register.registry.keeper') }}</h2>
-                @if ($asset->keeper)
-                    <p><span class="ar-avatar">{{ mb_substr($asset->keeper->name, 0, 1) }}</span><span @class(['ar-inactive-keeper' => $asset->keeper_is_inactive])>{{ $asset->keeper->name }}@if ($asset->keeper_is_inactive) {{ __('asset-register::asset-register.registry.former_member') }}@endif</span></p>
+                @if ($isKeeperView && $pendingHandover && (int) $pendingHandover->recipient_id === (int) auth()->id())
+                    <h2>{{ __('asset-register::asset-register.mine.waiting_for_confirmation') }}</h2>
+                    <p>{{ __('asset-register::asset-register.asset_detail.pending_since', ['date' => hk_datetime($pendingHandover->handed_over_at) ?? '--']) }}</p>
                 @else
+                    <h2>{{ $isKeeperView ? __('asset-register::asset-register.asset_detail.you_are_keeper') : __('asset-register::asset-register.registry.keeper') }}</h2>
+                @endif
+                @if (! ($isKeeperView && $pendingHandover && (int) $pendingHandover->recipient_id === (int) auth()->id()) && $asset->keeper)
+                    <p><span class="ar-avatar">{{ mb_substr($asset->keeper->name, 0, 1) }}</span><span @class(['ar-inactive-keeper' => $asset->keeper_is_inactive])>{{ $asset->keeper->name }}@if ($asset->keeper_is_inactive) {{ __('asset-register::asset-register.registry.former_member') }}@endif</span></p>
+                @elseif (! ($isKeeperView && $pendingHandover && (int) $pendingHandover->recipient_id === (int) auth()->id()))
                     <p class="ar-muted">{{ __('asset-register::asset-register.asset_detail.no_keeper') }}</p>
                 @endif
                 @if ($pendingHandover)
@@ -196,5 +216,7 @@
         @include('asset-register::asset-register.partials.asset-form-dialog')
     @endif
 </main>
-@include('asset-register::asset-register.action-dialogs')
+@if ($canManage)
+    @include('asset-register::asset-register.action-dialogs')
+@endif
 @endsection

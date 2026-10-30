@@ -20,7 +20,7 @@ interface AssetServiceInterface
     /**
      * @return array<string, mixed>
      */
-    public function minePage(User $user): array;
+    public function minePage(User $user, int $perPage, int $page): array;
 
     /**
      * @return array<string, mixed>
@@ -62,4 +62,14 @@ interface AssetServiceInterface
     public function editForm(User $user, int $assetId): array;
 
     public function update(User $user, int $assetId, AssetData $data): Asset;
+
+    public function changeStatus(User $user, int $assetId, string $status, string $reason): Asset;
+
+    public function dispose(
+        User $user,
+        int $assetId,
+        string $disposedAt,
+        string $method,
+        string $basis,
+    ): Asset;
 }

@@ -54,6 +54,10 @@ interface AssetRepositoryInterface
 
     public function paginateRegistry(int $accountId, AssetRegistryFilters $filters): LengthAwarePaginator;
 
+    public function mineAssets(int $accountId, int $userId, int $perPage, int $page): LengthAwarePaginator;
+
+    public function pendingMineAssetCount(int $accountId, int $userId): int;
+
     public function findForShow(int $accountId, int $assetId): Asset;
 
     public function findForEdit(int $accountId, int $assetId): Asset;
@@ -61,6 +65,17 @@ interface AssetRepositoryInterface
     public function createWithHistory(int $accountId, int $userId, AssetData $data): Asset;
 
     public function updateWithHistory(int $accountId, int $userId, int $assetId, AssetData $data): Asset;
+
+    public function changeStatusWithHistory(int $accountId, int $userId, int $assetId, string $status, string $reason): Asset;
+
+    public function disposeWithHistory(
+        int $accountId,
+        int $userId,
+        int $assetId,
+        string $disposedAt,
+        string $method,
+        string $basis,
+    ): Asset;
 
     public function activeKeeperIds(int $accountId, Collection $keeperIds): Collection;
 

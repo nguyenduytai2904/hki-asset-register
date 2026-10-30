@@ -143,7 +143,7 @@ final class AssetRegisterSchema
             $table->string('disposal_basis', 500)->nullable();
             $table->timestamps();
             $table->unique(['account_id', 'code'], 'asset_register_assets_account_id_code_unique');
-            $table->index('current_keeper_id', 'asset_register_assets_current_keeper_id_index');
+            $table->index(['account_id', 'current_keeper_id'], 'asset_register_assets_account_id_current_keeper_id_index');
             $table->index(['account_id', 'status'], 'asset_register_assets_account_id_status_index');
         });
     }

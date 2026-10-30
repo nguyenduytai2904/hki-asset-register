@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hki\AssetRegister\Asset\Http\Controllers;
 
+use App\Contracts\Services\NotificationServices\NotificationAutoReadServiceInterface;
 use App\Http\Controllers\Web\BaseWebController;
 use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
 use Hki\AssetRegister\Asset\Factories\AssetLocationDataFactory;
@@ -17,7 +18,7 @@ use Hki\AssetRegister\Asset\Http\Requests\StoreAssetLocationRequest;
 use Hki\AssetRegister\Asset\Http\Requests\StoreAssetTypeRequest;
 use Hki\AssetRegister\Asset\Http\Requests\UpdateAssetLocationRequest;
 use Hki\AssetRegister\Asset\Http\Requests\UpdateAssetTypeRequest;
-use Hki\AssetRegister\Support\AssetRegisterPreviewData;
+use Hki\AssetRegister\Asset\Models\Asset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -27,6 +28,7 @@ final class AssetRegisterController extends BaseWebController
         private readonly AssetServiceInterface $service,
         private readonly AssetTypeDataFactory $typeDataFactory,
         private readonly AssetLocationDataFactory $locationDataFactory,
+        private readonly NotificationAutoReadServiceInterface $notificationAutoRead,
     ) {}
 
     public function index(AssetIndexRequest $request): RedirectResponse
@@ -36,21 +38,22 @@ final class AssetRegisterController extends BaseWebController
 
     public function mine(AssetMineRequest $request): View
     {
-        return view('asset-register::asset-register.page', $this->service->minePage($request->user()));
-    }
+        $filters = $request->validated();
+        $pageData = $this->service->minePage(
+            $request->user(),
+            (int) $filters['per_page'],
+            (int) $filters['page'],
+        );
+        $assetIds = $pageData['assets']->getCollection()->modelKeys();
+        if ($assetIds !== []) {
+            $this->notificationAutoRead->markSubjectsRead(
+                (int) $request->user()->id,
+                Asset::NOTIFICATION_SUBJECT_TYPE,
+                $assetIds,
+            );
+        }
 
-    public function minePreview(AssetMineRequest $request, string $assetCode): View
-    {
-        $pageData = $this->service->minePage($request->user());
-        $asset = AssetRegisterPreviewData::mineAsset($assetCode);
-
-        abort_if($asset === null, 404);
-
-        return view('asset-register::asset-register.asset-mine-preview-show', [
-            'activeTab' => 'mine',
-            'tabs' => $pageData['tabs'],
-            'asset' => $asset,
-        ]);
+        return view('asset-register::asset-register.page', $pageData);
     }
 
     public function settings(AssetSettingsRequest $request): View

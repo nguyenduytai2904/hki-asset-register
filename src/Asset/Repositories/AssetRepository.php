@@ -12,9 +12,11 @@ use Hki\AssetRegister\Asset\DTOs\AssetLocationData;
 use Hki\AssetRegister\Asset\DTOs\AssetRegistryFilters;
 use Hki\AssetRegister\Asset\DTOs\AssetTypeData;
 use Hki\AssetRegister\Asset\Models\Asset;
+use Hki\AssetRegister\Asset\Models\AssetHandover;
 use Hki\AssetRegister\Asset\Models\AssetHistory;
 use Hki\AssetRegister\Asset\Models\AssetLocation;
 use Hki\AssetRegister\Asset\Models\AssetType;
+use Hki\AssetRegister\Support\AssetStatusTransitions;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -145,6 +147,12 @@ final class AssetRepository implements AssetRepositoryInterface
                 'type' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
                 'location' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
                 'keeper',
+                'histories' => fn (HasMany $query) => $query
+                    ->where('account_id', $accountId)
+                    ->where('action', 'status_changed')
+                    ->latest('created_at')
+                    ->latest('id')
+                    ->limit(1),
             ])
             ->withExists([
                 'handovers as has_pending_handover' => fn (Builder $query) => $query
@@ -179,6 +187,74 @@ final class AssetRepository implements AssetRepositoryInterface
         $page = min($filters->page, $lastPage);
 
         return $query->paginate($filters->perPage, ['*'], 'page', $page)->withQueryString();
+    }
+
+    public function mineAssets(int $accountId, int $userId, int $perPage, int $page): LengthAwarePaginator
+    {
+        $query = Asset::query()
+            ->where('account_id', $accountId)
+            ->where('status', 'in_use')
+            ->where(function (Builder $query) use ($accountId, $userId): void {
+                $query->where(function (Builder $held) use ($accountId, $userId): void {
+                    $held->where('current_keeper_id', $userId)
+                        ->whereHas('handovers', fn (Builder $handover) => $handover
+                            ->where('account_id', $accountId)
+                            ->where('recipient_id', $userId)
+                            ->where('status', 'confirmed')
+                            ->whereNull('closed_at'));
+                })->orWhereHas('handovers', fn (Builder $handover) => $handover
+                    ->where('account_id', $accountId)
+                    ->where('recipient_id', $userId)
+                    ->where('status', 'pending')
+                    ->whereNull('closed_at'));
+            })
+            ->withExists(['handovers as has_pending_handover' => fn (Builder $handover) => $handover
+                ->where('account_id', $accountId)
+                ->where('recipient_id', $userId)
+                ->where('status', 'pending')
+                ->whereNull('closed_at')])
+            ->withMax(['handovers as latest_handover_at' => fn (Builder $handover) => $handover
+                ->where('account_id', $accountId)
+                ->where('recipient_id', $userId)
+                ->whereIn('status', ['pending', 'confirmed'])
+                ->whereNull('closed_at')], 'handed_over_at')
+            ->with([
+                'type' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
+                'location' => fn (BelongsTo $query) => $query->where('account_id', $accountId),
+                'handovers' => fn (HasMany $query) => $query
+                    ->where('account_id', $accountId)
+                    ->where('recipient_id', $userId)
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->whereNull('closed_at')
+                    ->latest('handed_over_at'),
+                'histories' => fn (HasMany $query) => $query
+                    ->where('account_id', $accountId)
+                    ->where('action', 'handed_over')
+                    ->with('user')
+                    ->latest('created_at'),
+            ])
+            ->orderByDesc('has_pending_handover')
+            ->orderByDesc('latest_handover_at')
+            ->orderBy('id');
+
+        $total = (clone $query)->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $lastPage);
+
+        return $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
+    }
+
+    public function pendingMineAssetCount(int $accountId, int $userId): int
+    {
+        return AssetHandover::query()
+            ->where('account_id', $accountId)
+            ->where('recipient_id', $userId)
+            ->where('status', 'pending')
+            ->whereNull('closed_at')
+            ->whereHas('asset', fn (Builder $asset) => $asset
+                ->where('account_id', $accountId)
+                ->where('status', 'in_use'))
+            ->count();
     }
 
     public function findForShow(int $accountId, int $assetId): Asset
@@ -298,6 +374,141 @@ final class AssetRepository implements AssetRepositoryInterface
 
             return $asset;
         });
+    }
+
+    public function changeStatusWithHistory(int $accountId, int $userId, int $assetId, string $status, string $reason): Asset
+    {
+        return DB::transaction(function () use ($accountId, $userId, $assetId, $status, $reason): Asset {
+            $asset = Asset::query()
+                ->where('account_id', $accountId)
+                ->lockForUpdate()
+                ->findOrFail($assetId);
+
+            if (! AssetStatusTransitions::allows($asset->status, $status)) {
+                throw ValidationException::withMessages([
+                    'status' => __('asset-register::asset-register.validation.invalid_status_transition'),
+                ]);
+            }
+
+            if ($asset->status === 'in_use') {
+                $openHandovers = AssetHandover::query()
+                    ->where('account_id', $accountId)
+                    ->where('asset_id', $asset->id)
+                    ->whereNull('closed_at')
+                    ->lockForUpdate()
+                    ->get();
+
+                if (
+                    $openHandovers->count() !== 1
+                    || (int) $openHandovers->sole()->recipient_id !== (int) $asset->current_keeper_id
+                ) {
+                    throw ValidationException::withMessages([
+                        'status' => __('asset-register::asset-register.validation.open_handover_inconsistent'),
+                    ]);
+                }
+
+                $handover = $openHandovers->sole();
+                $handover->status = 'closed';
+                $handover->closed_at = now();
+                $closureNote = __('asset-register::asset-register.actions.status_closure_note', [
+                    'status' => __('asset-register::asset-register.asset_status.'.$status),
+                    'reason' => trim($reason),
+                ]);
+                $handover->note = implode("\n\n", array_filter([
+                    trim((string) $handover->note),
+                    $closureNote,
+                ]));
+                $handover->save();
+                $asset->current_keeper_id = null;
+            }
+
+            $from = $asset->status;
+            $asset->status = $status;
+            $asset->save();
+
+            AssetHistory::query()->create([
+                'account_id' => $accountId,
+                'asset_id' => $asset->id,
+                'user_id' => $userId,
+                'action' => 'status_changed',
+                'description' => json_encode([
+                    'from' => $from,
+                    'to' => $status,
+                    'reason' => trim($reason),
+                ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ]);
+
+            return $asset;
+        }, 3);
+    }
+
+    public function disposeWithHistory(
+        int $accountId,
+        int $userId,
+        int $assetId,
+        string $disposedAt,
+        string $method,
+        string $basis,
+    ): Asset {
+        return DB::transaction(function () use ($accountId, $userId, $assetId, $disposedAt, $method, $basis): Asset {
+            $asset = Asset::query()
+                ->where('account_id', $accountId)
+                ->lockForUpdate()
+                ->findOrFail($assetId);
+
+            if ($asset->status === 'disposed') {
+                throw ValidationException::withMessages([
+                    'asset' => __('asset-register::asset-register.validation.disposed_asset'),
+                ]);
+            }
+
+            if ($asset->status === 'in_use') {
+                throw ValidationException::withMessages([
+                    'asset' => __('asset-register::asset-register.validation.return_before_disposal'),
+                ]);
+            }
+
+            $today = TimezoneContext::now()->toDateString();
+            if ($disposedAt > $today) {
+                throw ValidationException::withMessages([
+                    'disposed_at' => __('asset-register::asset-register.validation.disposal_date_future'),
+                ]);
+            }
+
+            if ($asset->purchase_date !== null && $disposedAt < $asset->purchase_date->toDateString()) {
+                throw ValidationException::withMessages([
+                    'disposed_at' => __('asset-register::asset-register.validation.disposal_before_purchase'),
+                ]);
+            }
+
+            $basis = trim($basis);
+            if ($basis === '') {
+                throw ValidationException::withMessages([
+                    'disposal_basis' => __('asset-register::asset-register.validation.disposal_basis_required'),
+                ]);
+            }
+
+            $asset->status = 'disposed';
+            $asset->current_keeper_id = null;
+            $asset->disposed_at = $disposedAt;
+            $asset->disposal_method = $method;
+            $asset->disposal_basis = $basis;
+            $asset->save();
+
+            AssetHistory::query()->create([
+                'account_id' => $accountId,
+                'asset_id' => $asset->id,
+                'user_id' => $userId,
+                'action' => 'disposed',
+                'description' => json_encode([
+                    'disposed_at' => $disposedAt,
+                    'method' => $method,
+                    'basis' => $basis,
+                ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ]);
+
+            return $asset;
+        }, 3);
     }
 
     public function activeKeeperIds(int $accountId, Collection $keeperIds): Collection

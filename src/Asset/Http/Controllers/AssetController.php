@@ -10,8 +10,10 @@ use App\Http\Controllers\Web\BaseWebController;
 use Hki\AssetRegister\Asset\Contracts\Services\AssetServiceInterface;
 use Hki\AssetRegister\Asset\Factories\AssetDataFactory;
 use Hki\AssetRegister\Asset\Factories\AssetRegistryFiltersFactory;
+use Hki\AssetRegister\Asset\Http\Requests\ChangeAssetStatusRequest;
 use Hki\AssetRegister\Asset\Http\Requests\AssetRegistryFilterRequest;
 use Hki\AssetRegister\Asset\Http\Requests\CreateAssetFormRequest;
+use Hki\AssetRegister\Asset\Http\Requests\DisposeAssetRequest;
 use Hki\AssetRegister\Asset\Http\Requests\EditAssetRequest;
 use Hki\AssetRegister\Asset\Http\Requests\ShowAssetRequest;
 use Hki\AssetRegister\Asset\Http\Requests\StoreAssetRequest;
@@ -98,5 +100,34 @@ final class AssetController extends BaseWebController
         return redirect()
             ->route('asset-register.assets.show', $asset->id)
             ->with('success', __('asset-register::asset-register.messages.asset_updated'));
+    }
+
+    public function changeStatus(ChangeAssetStatusRequest $request, int $assetId): RedirectResponse
+    {
+        $asset = $this->service->changeStatus(
+            $request->user(),
+            $assetId,
+            (string) $request->validated('status'),
+            (string) $request->validated('reason'),
+        );
+
+        return redirect()
+            ->route('asset-register.assets.show', $asset->id)
+            ->with('success', __('asset-register::asset-register.messages.status_changed'));
+    }
+
+    public function dispose(DisposeAssetRequest $request, int $assetId): RedirectResponse
+    {
+        $asset = $this->service->dispose(
+            $request->user(),
+            $assetId,
+            (string) $request->validated('disposed_at'),
+            (string) $request->validated('disposal_method'),
+            (string) $request->validated('disposal_basis'),
+        );
+
+        return redirect()
+            ->route('asset-register.assets.show', $asset->id)
+            ->with('success', __('asset-register::asset-register.messages.asset_disposed'));
     }
 }

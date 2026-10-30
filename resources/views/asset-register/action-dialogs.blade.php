@@ -1,4 +1,4 @@
-<div class="ar-action-dialogs" x-data="window.HK.assetRegister.actionDialogs()">
+<div class="ar-action-dialogs" x-data="window.HK.assetRegister.actionDialogs()" data-ar-failed-dialog="{{ old('_asset_register_dialog') }}">
 <dialog class="ar-dialog ar-action-dialog" data-ar-action-dialog="handover" aria-labelledby="ar-handover-title">
     <header class="ar-dialog-header">
         <h2 id="ar-handover-title"><span data-ar-context="action-title">{{ __('asset-register::asset-register.actions.handover_title') }}</span> · <span data-ar-context="code">—</span></h2>
@@ -84,19 +84,24 @@
         <h2 id="ar-status-title">{{ __('asset-register::asset-register.actions.status_title') }} · <span data-ar-context="code">—</span></h2>
         <button class="ar-dialog-close" type="button" data-ar-close-action-dialog aria-label="{{ __('asset-register::asset-register.asset_form.cancel') }}"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
     </header>
-    <form class="ar-action-form" data-ar-preview-form>
+    <form class="ar-action-form" method="POST" action="{{ route('asset-register.assets.status', $asset->id) }}" data-ar-submit-form>
+        @csrf
+        <input type="hidden" name="_asset_register_dialog" value="status">
+        <div class="ar-action-feedback" data-ar-action-feedback data-error-message="{{ __('asset-register::asset-register.actions.submit_error') }}" role="alert" aria-live="polite" hidden></div>
+        @error('asset')<small class="ar-field-error">{{ $message }}</small>@enderror
         <p class="ar-current-status">{{ __('asset-register::asset-register.actions.current_status') }} <span class="ar-status" data-ar-context-status>—</span> · {{ __('asset-register::asset-register.actions.allowed_status_hint') }}</p>
         <div class="ar-choice-list">
-            <label class="ar-choice" data-ar-status-choice="available"><input type="radio" name="status" value="available"><span><strong>{{ __('asset-register::asset-register.asset_status.available') }}</strong><small>{{ __('asset-register::asset-register.actions.status_available_hint') }}</small></span></label>
-            <label class="ar-choice" data-ar-status-choice="in_repair"><input type="radio" name="status" value="in_repair"><span><strong>{{ __('asset-register::asset-register.asset_status.in_repair') }}</strong><small>{{ __('asset-register::asset-register.actions.status_repair_hint') }}</small></span></label>
-            <label class="ar-choice" data-ar-status-choice="broken"><input type="radio" name="status" value="broken"><span><strong>{{ __('asset-register::asset-register.asset_status.broken') }}</strong><small>{{ __('asset-register::asset-register.actions.status_broken_hint') }}</small></span></label>
-            <label class="ar-choice" data-ar-status-choice="lost"><input type="radio" name="status" value="lost"><span><strong>{{ __('asset-register::asset-register.asset_status.lost') }}</strong><small>{{ __('asset-register::asset-register.actions.status_lost_hint') }}</small></span></label>
+            <label class="ar-choice" data-ar-status-choice="available"><input type="radio" name="status" value="available" @checked(old('status') === 'available')><span><strong>{{ __('asset-register::asset-register.asset_status.available') }}</strong><small>{{ __('asset-register::asset-register.actions.status_available_hint') }}</small></span></label>
+            <label class="ar-choice" data-ar-status-choice="in_repair"><input type="radio" name="status" value="in_repair" @checked(old('status') === 'in_repair')><span><strong>{{ __('asset-register::asset-register.asset_status.in_repair') }}</strong><small>{{ __('asset-register::asset-register.actions.status_repair_hint') }}</small></span></label>
+            <label class="ar-choice" data-ar-status-choice="broken"><input type="radio" name="status" value="broken" @checked(old('status') === 'broken')><span><strong>{{ __('asset-register::asset-register.asset_status.broken') }}</strong><small>{{ __('asset-register::asset-register.actions.status_broken_hint') }}</small></span></label>
+            <label class="ar-choice" data-ar-status-choice="lost"><input type="radio" name="status" value="lost" @checked(old('status') === 'lost')><span><strong>{{ __('asset-register::asset-register.asset_status.lost') }}</strong><small>{{ __('asset-register::asset-register.actions.status_lost_hint') }}</small></span></label>
         </div>
+        @error('status')<small class="ar-field-error">{{ $message }}</small>@enderror
         <label class="ar-action-label">{{ __('asset-register::asset-register.actions.reason') }} <span class="ar-required">*</span>
-            <textarea rows="3" minlength="5" maxlength="1000" required></textarea>
+            <textarea name="reason" rows="3" minlength="5" maxlength="1000" required>{{ old('reason') }}</textarea>
             <small class="ar-form-hint">{{ __('asset-register::asset-register.actions.reason_hint') }} {{ __('asset-register::asset-register.actions.no_personal_data') }}</small>
+            @error('reason')<small class="ar-field-error">{{ $message }}</small>@enderror
         </label>
-        <p class="ar-action-preview-note" hidden>{{ __('asset-register::asset-register.actions.preview_only') }}</p>
         <footer class="ar-dialog-footer">
             <button class="ar-button" type="button" data-ar-close-action-dialog>{{ __('asset-register::asset-register.asset_form.cancel') }}</button>
             <button class="ar-button ar-button-dark" type="submit">{{ __('asset-register::asset-register.actions.save') }}</button>
@@ -109,25 +114,35 @@
         <h2 id="ar-dispose-title">{{ __('asset-register::asset-register.actions.dispose_title') }} · <span data-ar-context="code">—</span></h2>
         <button class="ar-dialog-close" type="button" data-ar-close-action-dialog aria-label="{{ __('asset-register::asset-register.asset_form.cancel') }}"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
     </header>
-    <form class="ar-action-form" data-ar-preview-form>
+    <form class="ar-action-form" method="POST" action="{{ route('asset-register.assets.dispose', $asset->id) }}" data-ar-submit-form>
+        @csrf
+        <input type="hidden" name="_asset_register_dialog" value="dispose">
+        <div class="ar-action-feedback" data-ar-action-feedback data-error-message="{{ __('asset-register::asset-register.actions.submit_error') }}" role="alert" aria-live="polite" hidden></div>
+        @error('asset')<small class="ar-field-error">{{ $message }}</small>@enderror
         <div class="ar-action-warning is-danger"><span class="material-symbols-rounded" aria-hidden="true">warning</span>{{ __('asset-register::asset-register.actions.dispose_warning') }} <strong data-ar-context="code">—</strong></div>
         <div class="ar-action-form-grid">
-            <label>{{ __('asset-register::asset-register.actions.disposed_at') }} <span class="ar-required">*</span><input type="date" data-hk-datepicker="date" required></label>
+            <label>{{ __('asset-register::asset-register.actions.disposed_at') }} <span class="ar-required">*</span><input type="date" name="disposed_at" data-ar-datepicker="date" min="{{ $asset->purchase_date?->format('Y-m-d') }}" max="{{ $warrantyToday->toDateString() }}" value="{{ old('disposed_at') }}" required>
+                <small class="ar-form-hint">{{ __('asset-register::asset-register.actions.disposal_date_hint') }}</small>
+                <small class="ar-field-error" data-ar-disposal-date-unavailable hidden>{{ __('asset-register::asset-register.actions.disposal_date_unavailable') }}</small>
+                @error('disposed_at')<small class="ar-field-error">{{ $message }}</small>@enderror
+            </label>
             <label>{{ __('asset-register::asset-register.actions.disposal_method') }} <span class="ar-required">*</span>
-                <select required>
-                    <option>{{ __('asset-register::asset-register.actions.method_sale') }}</option>
-                    <option>{{ __('asset-register::asset-register.actions.method_destroy') }}</option>
-                    <option>{{ __('asset-register::asset-register.actions.method_gift') }}</option>
-                    <option>{{ __('asset-register::asset-register.actions.method_return') }}</option>
-                    <option>{{ __('asset-register::asset-register.actions.method_other') }}</option>
+                <select name="disposal_method" required>
+                    <option value="" disabled @selected(old('disposal_method') === null)>{{ __('asset-register::asset-register.actions.select_method') }}</option>
+                    <option value="sale" @selected(old('disposal_method') === 'sale')>{{ __('asset-register::asset-register.actions.method_sale') }}</option>
+                    <option value="destroy" @selected(old('disposal_method') === 'destroy')>{{ __('asset-register::asset-register.actions.method_destroy') }}</option>
+                    <option value="gift" @selected(old('disposal_method') === 'gift')>{{ __('asset-register::asset-register.actions.method_gift') }}</option>
+                    <option value="return" @selected(old('disposal_method') === 'return')>{{ __('asset-register::asset-register.actions.method_return') }}</option>
+                    <option value="other" @selected(old('disposal_method') === 'other')>{{ __('asset-register::asset-register.actions.method_other') }}</option>
                 </select>
+                @error('disposal_method')<small class="ar-field-error">{{ $message }}</small>@enderror
             </label>
             <label class="ar-form-span">{{ __('asset-register::asset-register.actions.disposal_basis') }} <span class="ar-required">*</span>
-                <textarea rows="3" minlength="1" maxlength="1000" required></textarea>
+                <textarea name="disposal_basis" rows="3" minlength="1" maxlength="500" required>{{ old('disposal_basis') }}</textarea>
                 <small class="ar-form-hint">{{ __('asset-register::asset-register.actions.no_personal_data') }}</small>
+                @error('disposal_basis')<small class="ar-field-error">{{ $message }}</small>@enderror
             </label>
         </div>
-        <p class="ar-action-preview-note" hidden>{{ __('asset-register::asset-register.actions.preview_only') }}</p>
         <footer class="ar-dialog-footer">
             <button class="ar-button" type="button" data-ar-close-action-dialog>{{ __('asset-register::asset-register.asset_form.cancel') }}</button>
             <button class="ar-button ar-button-danger" type="submit"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>{{ __('asset-register::asset-register.actions.dispose_submit') }}</button>

@@ -51,7 +51,20 @@
                             </td>
                             <td>{{ $asset->location?->name ?: '--' }}</td>
                             <td>{{ __('asset-register::asset-register.condition.' . $asset->condition) }}</td>
-                            <td><span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span></td>
+                            <td>
+                                @if ($asset->latest_status_change)
+                                    <span class="ar-status-reason" tabindex="0" aria-describedby="ar-registry-status-change-{{ $asset->id }}" data-ar-registry-status-change>
+                                        <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
+                                        <span class="ar-status-reason-tooltip" id="ar-registry-status-change-{{ $asset->id }}" role="tooltip">
+                                            <strong>{{ __('asset-register::asset-register.actions.latest_status_change') }}</strong>
+                                            <p>{{ __('asset-register::asset-register.asset_status.' . $asset->latest_status_change['from']) }} → {{ __('asset-register::asset-register.asset_status.' . $asset->latest_status_change['to']) }}</p>
+                                            <p><strong>{{ __('asset-register::asset-register.actions.reason') }}:</strong> {{ $asset->latest_status_change['reason'] }}</p>
+                                        </span>
+                                    </span>
+                                @else
+                                    <span @class(['ar-status', 'is-pending' => $statusKey === 'pending', 'is-warning' => $statusKey === 'in_repair', 'is-danger' => in_array($statusKey, ['broken', 'lost'], true), 'is-inactive' => $statusKey === 'disposed'])>{{ __('asset-register::asset-register.asset_status.' . $statusKey) }}</span>
+                                @endif
+                            </td>
                             <td>
                                 @if ($asset->warranty_end_date)
                                     {{ hk_date_only($asset->warranty_end_date) }}

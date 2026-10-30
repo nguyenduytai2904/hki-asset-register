@@ -14,9 +14,10 @@ use Hki\AssetRegister\Asset\DTOs\AssetLocationData;
 use Hki\AssetRegister\Asset\DTOs\AssetRegistryFilters;
 use Hki\AssetRegister\Asset\DTOs\AssetTypeData;
 use Hki\AssetRegister\Asset\Models\Asset;
+use Hki\AssetRegister\Asset\Models\AssetHistory;
 use Hki\AssetRegister\Asset\Models\AssetLocation;
 use Hki\AssetRegister\Asset\Models\AssetType;
-use Hki\AssetRegister\Support\AssetRegisterPreviewData;
+use Hki\AssetRegister\Support\AssetStatusTransitions;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
@@ -40,15 +41,22 @@ final class AssetService implements AssetServiceInterface
         abort(403);
     }
 
-    public function minePage(User $user): array
+    public function minePage(User $user, int $perPage, int $page): array
     {
         $accountId = AccountContext::getOrFail();
         Gate::authorize('useSelfService', [Asset::class, $accountId]);
+        $assets = $this->assets->mineAssets($accountId, (int) $user->id, $perPage, $page);
 
         return [
             'activeTab' => 'mine',
             'tabs' => $this->tabs($user, $accountId),
-            'preview' => AssetRegisterPreviewData::mine(),
+            'assets' => $assets,
+            'pendingAssets' => $assets
+                ->getCollection()
+                ->filter(fn (Asset $asset): bool => $asset->handovers->first()?->status === 'pending')
+                ->values(),
+            'pendingCount' => $this->assets->pendingMineAssetCount($accountId, (int) $user->id),
+            'warrantyToday' => TimezoneContext::now()->startOfDay(),
         ];
     }
 
@@ -152,6 +160,11 @@ final class AssetService implements AssetServiceInterface
                 'keeper_is_inactive',
                 $asset->current_keeper_id !== null && ! $activeKeeperIds->contains($asset->current_keeper_id),
             );
+            $asset->setAttribute(
+                'latest_status_change',
+                $this->latestStatusChangeData($asset->histories->first()),
+            );
+            $asset->unsetRelation('histories');
         });
 
         return [
@@ -202,6 +215,10 @@ final class AssetService implements AssetServiceInterface
             $asset->setRelation('histories', $asset->histories->where('user_id', $user->id)->values());
         }
 
+        $latestStatusChange = $this->latestStatusChangeData($asset->histories->first(
+            fn ($history): bool => $history->action === 'status_changed',
+        ));
+
         $activeKeeper = $asset->current_keeper_id === null
             ? false
             : $this->assets->keeperIsActive($accountId, (int) $asset->current_keeper_id);
@@ -212,8 +229,10 @@ final class AssetService implements AssetServiceInterface
             'tabs' => $this->tabs($user, $accountId),
             'asset' => $asset,
             'isKeeperView' => ! $canViewRegistry,
+            'latestStatusChange' => $latestStatusChange,
             'warrantyToday' => TimezoneContext::now()->startOfDay(),
             'canManage' => $user->can('manageCatalog', [Asset::class, $accountId]) && $asset->status !== 'disposed',
+            'allowedStatusTransitions' => AssetStatusTransitions::allowedFrom($asset->status),
         ];
     }
 
@@ -239,6 +258,40 @@ final class AssetService implements AssetServiceInterface
         Gate::authorize('manageAsset', [Asset::class, $assetId, $accountId]);
 
         return $this->assets->updateWithHistory($accountId, (int) $user->id, $assetId, $data);
+    }
+
+    public function changeStatus(User $user, int $assetId, string $status, string $reason): Asset
+    {
+        $accountId = AccountContext::getOrFail();
+        Gate::authorize('manageAsset', [Asset::class, $assetId, $accountId]);
+
+        return $this->assets->changeStatusWithHistory(
+            $accountId,
+            (int) $user->id,
+            $assetId,
+            $status,
+            $reason,
+        );
+    }
+
+    public function dispose(
+        User $user,
+        int $assetId,
+        string $disposedAt,
+        string $method,
+        string $basis,
+    ): Asset {
+        $accountId = AccountContext::getOrFail();
+        Gate::authorize('manageAsset', [Asset::class, $assetId, $accountId]);
+
+        return $this->assets->disposeWithHistory(
+            $accountId,
+            (int) $user->id,
+            $assetId,
+            $disposedAt,
+            $method,
+            $basis,
+        );
     }
 
     /**
@@ -273,5 +326,24 @@ final class AssetService implements AssetServiceInterface
         }
 
         return $tabs;
+    }
+
+    private function latestStatusChangeData(?AssetHistory $history): ?array
+    {
+        $data = $history ? json_decode((string) $history->description, true) : null;
+        if (
+            ! is_array($data)
+            || ! is_string($data['from'] ?? null)
+            || ! is_string($data['to'] ?? null)
+            || ! is_string($data['reason'] ?? null)
+        ) {
+            return null;
+        }
+
+        return [
+            'from' => $data['from'],
+            'to' => $data['to'],
+            'reason' => $data['reason'],
+        ];
     }
 }

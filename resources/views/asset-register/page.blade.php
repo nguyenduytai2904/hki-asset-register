@@ -22,82 +22,7 @@
     </nav>
 
     @if ($activeTab === 'mine')
-        <header class="ar-heading ar-page-heading">
-            <div>
-                <h1>{{ __('asset-register::asset-register.mine.title') }}</h1>
-                <p>{{ __('asset-register::asset-register.mine.description') }}</p>
-            </div>
-            <div class="ar-heading-actions">
-                <span class="ar-preview-label">{{ __('asset-register::asset-register.preview_label') }}</span>
-            </div>
-        </header>
-        <section class="ar-view-content ar-mine-content">
-        @if ($preview['pending'])
-            <section class="ar-pending-card" aria-labelledby="ar-pending-heading">
-                <h2 id="ar-pending-heading">
-                    <span class="material-symbols-rounded" aria-hidden="true">inventory</span>
-                    {{ __('asset-register::asset-register.mine.pending', ['count' => count($preview['pending'])]) }}
-                </h2>
-                @foreach ($preview['pending'] as $asset)
-                    <div class="ar-pending-item">
-                        <span class="ar-device-icon"><span class="material-symbols-rounded" aria-hidden="true">{{ $asset['icon'] }}</span></span>
-                        <div class="ar-pending-asset">
-                            <a class="ar-preview-asset-link" href="{{ route('asset-register.mine.preview', ['assetCode' => $asset['code']]) }}"><strong>{{ $asset['code'] }}</strong> · {{ $asset['name'] }}</a>
-                            <small>{{ $asset['model'] }} · {{ __('asset-register::asset-register.registry.serial') }} {{ $asset['serial'] }}</small>
-                        </div>
-                        <p>{{ __('asset-register::asset-register.mine.handed_over_by', ['name' => $asset['assigned_by'], 'date' => $asset['assigned_at']]) }} · {{ __('asset-register::asset-register.mine.condition_at_handover', ['condition' => $asset['condition']]) }}</p>
-                        <div class="ar-preview-actions">
-                            <button class="ar-button" type="button" data-ar-open-action-dialog="issue" data-code="{{ $asset['code'] }}" data-name="{{ $asset['name'] }}" data-issue-type="incorrect">
-                                <span class="material-symbols-rounded" aria-hidden="true">report</span>{{ __('asset-register::asset-register.mine.report_incorrect') }}
-                            </button>
-                            <button class="ar-button ar-button-dark" type="button" data-ar-open-action-dialog="confirm" data-code="{{ $asset['code'] }}" data-name="{{ $asset['name'] }}" data-condition="{{ $asset['condition'] }}" data-assigned-by="{{ $asset['assigned_by'] }}" data-assigned-at="{{ $asset['assigned_at'] }}">
-                                <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>{{ __('asset-register::asset-register.mine.confirm_received') }}
-                            </button>
-                        </div>
-                    </div>
-                @endforeach
-            </section>
-        @endif
-        <section class="ar-card ar-mine-list" aria-label="{{ __('asset-register::asset-register.mine.assets') }}">
-            <div class="ar-table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>{{ __('asset-register::asset-register.registry.asset') }}</th>
-                            <th>{{ __('asset-register::asset-register.registry.condition') }}</th>
-                            <th>{{ __('asset-register::asset-register.mine.received_at') }}</th>
-                            <th>{{ __('asset-register::asset-register.registry.status') }}</th>
-                            <th>{{ __('asset-register::asset-register.registry.warranty') }}</th>
-                            <th><span class="sr-only">{{ __('asset-register::asset-register.registry.details') }}</span></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($preview['assets'] as $asset)
-                            <tr>
-                                <td class="ar-asset-cell">
-                                    <span class="ar-device-icon"><span class="material-symbols-rounded" aria-hidden="true">{{ $asset['icon'] }}</span></span>
-                                    <span><a class="ar-preview-asset-link" href="{{ route('asset-register.mine.preview', ['assetCode' => $asset['code']]) }}"><strong>{{ $asset['code'] }}</strong> · {{ $asset['name'] }}</a><small>{{ $asset['model'] }} · {{ __('asset-register::asset-register.registry.serial') }} {{ $asset['serial'] }}</small></span>
-                                </td>
-                                <td>{{ $asset['condition'] }}</td>
-                                <td>{{ $asset['received_at'] }}</td>
-                                <td><span @class(['ar-status', 'is-pending' => $asset['status'] === 'pending'])>{{ __('asset-register::asset-register.asset_status.' . $asset['status']) }}</span></td>
-                                <td>{{ $asset['warranty'] }}</td>
-                                <td>
-                                    <div class="ar-row-actions">
-                                    <button class="ar-button ar-button-quiet" type="button" data-ar-open-action-dialog="issue" data-code="{{ $asset['code'] }}" data-name="{{ $asset['name'] }}" @if ($asset['status'] === 'pending') data-issue-type="incorrect" @endif aria-label="{{ $asset['status'] === 'pending' ? __('asset-register::asset-register.mine.report_incorrect') : __('asset-register::asset-register.mine.report_issue') }}">
-                                        <span class="material-symbols-rounded" aria-hidden="true">report</span>
-                                    </button>
-                                    <a class="ar-row-arrow" href="{{ route('asset-register.mine.preview', ['assetCode' => $asset['code']]) }}" aria-label="{{ __('asset-register::asset-register.registry.details') }}"><span class="material-symbols-rounded" aria-hidden="true">chevron_right</span></a>
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                    <tfoot><tr><td colspan="6">{{ __('asset-register::asset-register.mine.asset_count', ['count' => count($preview['assets'])]) }}</td></tr></tfoot>
-                </table>
-            </div>
-        </section>
-        </section>
+        @include('asset-register::asset-register.partials.mine-assets')
     @else
         <header class="ar-heading ar-page-heading">
             <div>
@@ -165,9 +90,6 @@
             @include('asset-register::asset-register.partials.registry-table-region')
         </div>
     @endif
-@if ($activeTab === 'mine')
-    @include('asset-register::asset-register.action-dialogs')
-@endif
 @if ($activeTab === 'registry')
     @if ($canManage)
         @include('asset-register::asset-register.partials.asset-form-dialog')
