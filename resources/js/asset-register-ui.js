@@ -2,6 +2,91 @@ function requestErrorMessage(error, fallback) {
     return error.response?.data?.message || fallback;
 }
 
+function withMultiSelectFilter(url, name, values) {
+    const next = new URL(url.toString());
+    const baseName = name.replace(/\[\]$/, '');
+
+    for (const key of new Set(next.searchParams.keys())) {
+        if (key === baseName || key.startsWith(`${baseName}[`)) {
+            next.searchParams.delete(key);
+        }
+    }
+
+    values.forEach((value) => next.searchParams.append(name, value));
+    next.searchParams.delete('page');
+
+    return next;
+}
+
+async function submitActionDialogForm(form) {
+    const feedback = form.querySelector('[data-ar-action-feedback]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (!feedback || !(submitButton instanceof HTMLButtonElement)) {
+        throw new Error('The asset action form is missing its feedback or submit control.');
+    }
+
+    feedback.hidden = true;
+    feedback.replaceChildren();
+    form.setAttribute('aria-busy', 'true');
+    submitButton.disabled = true;
+
+    const requestJson = async () => {
+        if (window.axios && typeof window.axios.post === 'function') {
+            return window.axios.post(form.action, new FormData(form), {
+                headers: { Accept: 'application/json' },
+            });
+        }
+
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            const payload = await response.clone().json().catch(() => null);
+            const error = new Error('The request failed.');
+            error.response = {
+                status: response.status,
+                data: payload || {},
+            };
+            throw error;
+        }
+
+        return { request: { responseURL: response.url } };
+    };
+
+    try {
+        const response = await requestJson();
+        const destination = response.request?.responseURL;
+        if (!destination || destination === window.location.href) {
+            window.location.reload();
+            return;
+        }
+
+        window.location.assign(destination);
+    } catch (error) {
+        const errors = error.response?.data?.errors || error.response?.data?.fields;
+        const messages = errors
+            ? Object.values(errors).flat().filter((message) => typeof message === 'string')
+            : [requestErrorMessage(error, feedback.dataset.errorMessage)];
+
+        if (!error.response) console.error(error);
+        const list = document.createElement('ul');
+        messages.forEach((message) => {
+            const item = document.createElement('li');
+            item.textContent = message;
+            list.append(item);
+        });
+        feedback.replaceChildren(list);
+        feedback.hidden = false;
+    } finally {
+        form.removeAttribute('aria-busy');
+        submitButton.disabled = false;
+    }
+}
+
 function destroyAssetFormDatePickers(content) {
     content.querySelectorAll('[data-hk-datepicker-input]').forEach((input) => input._flatpickr?.destroy());
 }
@@ -30,6 +115,58 @@ function enhanceAssetDatePicker(input) {
 
 function enhanceAssetDatePickers(root) {
     root.querySelectorAll('input[data-hk-datepicker]').forEach(enhanceAssetDatePicker);
+}
+
+function positionActionDialogDatePicker(picker, positionElement) {
+    const anchor = positionElement || picker.altInput || picker.input;
+    if (!(anchor instanceof HTMLElement)) return;
+
+    const bounds = anchor.getBoundingClientRect();
+    const calendar = picker.calendarContainer;
+    const calendarHeight = calendar.offsetHeight;
+    const calendarWidth = calendar.offsetWidth;
+    const showAbove = window.innerHeight - bounds.bottom < calendarHeight && bounds.top > calendarHeight;
+    const maxLeft = Math.max(8, window.innerWidth - calendarWidth - 8);
+    const top = showAbove ? bounds.top - calendarHeight - 2 : bounds.bottom + 2;
+
+    calendar.style.position = 'fixed';
+    calendar.style.top = `${Math.max(8, Math.min(top, window.innerHeight - calendarHeight - 8))}px`;
+    calendar.style.left = `${Math.min(Math.max(8, bounds.left), maxLeft)}px`;
+    calendar.style.right = 'auto';
+    calendar.classList.toggle('arrowTop', !showAbove);
+    calendar.classList.toggle('arrowBottom', showAbove);
+}
+
+function initializeActionDialogDatePickers(dialog) {
+    const inputs = dialog.querySelectorAll('input[data-ar-datepicker]');
+    if (!inputs.length) return;
+
+    const createDatePicker = window.HK?.datepicker?.create;
+    if (typeof createDatePicker !== 'function') {
+        dialog.classList.add('ar-dialog-datepicker-host');
+        return;
+    }
+
+    dialog.classList.add('ar-dialog-datepicker-host');
+    inputs.forEach((input) => {
+        if (input._flatpickr) {
+            enhanceAssetDatePicker(input);
+            return;
+        }
+
+        try {
+            createDatePicker(input, {
+                mode: input.dataset.arDatepicker,
+                flatpickr: {
+                    appendTo: dialog,
+                    position: positionActionDialogDatePicker,
+                },
+            });
+            enhanceAssetDatePicker(input);
+        } catch (error) {
+            console.warn('Asset register datepicker could not be initialized for dialog.', error);
+        }
+    });
 }
 
 function clearAssetFormErrors(form) {
@@ -83,10 +220,12 @@ function syncWarrantyFields(form, calculateEndDate = false) {
     if (!calculatedDate) return;
 
     const setDatePickerValue = window.HK?.datepicker?.setValue;
-    if (typeof setDatePickerValue !== 'function') {
-        throw new Error('The platform date picker value API is unavailable.');
+    if (typeof setDatePickerValue === 'function') {
+        setDatePickerValue(endDate, calculatedDate);
+        return;
     }
-    setDatePickerValue(endDate, calculatedDate);
+
+    endDate.value = calculatedDate;
 }
 
 function updateWarrantyFromEvent(target) {
@@ -277,10 +416,7 @@ function registryPage(config) {
                 ? target.tomselect.getValue()
                 : Array.from(target.selectedOptions, (option) => option.value);
             const values = Array.isArray(selected) ? selected : (selected ? [selected] : []);
-            const url = new URL(window.location.href);
-            url.searchParams.delete(target.name);
-            values.forEach((value) => url.searchParams.append(target.name, value));
-            url.searchParams.delete('page');
+            const url = withMultiSelectFilter(new URL(window.location.href), target.name, values);
 
             this.filterController?.abort();
             const controller = new AbortController();
@@ -531,6 +667,13 @@ function actionDialogs() {
 
             this.onDocumentClick = this.handleDocumentClick.bind(this);
             document.addEventListener('click', this.onDocumentClick);
+
+            const failedDialog = this.$el.dataset.arFailedDialog;
+            if (failedDialog) {
+                const trigger = this.$el.querySelector(`[data-ar-open-action-dialog="${CSS.escape(failedDialog)}"]`);
+                const dialog = this.dialogs.find((item) => item.dataset.arActionDialog === failedDialog);
+                if (trigger && dialog) this.openActionDialog(dialog, trigger, false);
+            }
         },
         destroy() {
             document.removeEventListener('click', this.onDocumentClick);
@@ -548,9 +691,17 @@ function actionDialogs() {
         },
         onDialogSubmit(event) {
             if (!(event.target instanceof HTMLFormElement)) return;
-            event.preventDefault();
-            const note = event.target.querySelector('.ar-action-preview-note');
-            if (note) note.hidden = false;
+            const form = event.target;
+            if (form.hasAttribute('data-ar-submit-form')) {
+                event.preventDefault();
+                void submitActionDialogForm(form);
+                return;
+            }
+            if (form.hasAttribute('data-ar-preview-form')) {
+                event.preventDefault();
+                const note = form.querySelector('.ar-action-preview-note');
+                if (note) note.hidden = false;
+            }
         },
         handleDocumentClick(event) {
             const target = event.target;
@@ -561,7 +712,15 @@ function actionDialogs() {
             const dialog = this.dialogs.find((item) => item.dataset.arActionDialog === trigger.dataset.arOpenActionDialog);
             if (!dialog) return;
 
-            dialog.querySelectorAll('form').forEach((form) => form.reset());
+            this.openActionDialog(dialog, trigger);
+        },
+        openActionDialog(dialog, trigger, resetForm = true) {
+            if (resetForm) {
+                dialog.querySelectorAll('form').forEach((form) => form.reset());
+                dialog.querySelectorAll('input[data-ar-datepicker]').forEach((input) => {
+                    input._flatpickr?.setDate(input.value || null, false);
+                });
+            }
             dialog.querySelectorAll('[data-ar-context]').forEach((element) => {
                 const key = element.dataset.arContext;
                 const dataKey = key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -586,7 +745,8 @@ function actionDialogs() {
                 choice.hidden = !allowedStatuses.includes(choice.dataset.arStatusChoice);
             });
             const firstStatus = statusChoices.find((choice) => !choice.hidden)?.querySelector('input');
-            if (firstStatus) firstStatus.checked = true;
+            const selectedStatus = statusChoices.find((choice) => choice.querySelector('input')?.checked);
+            if (firstStatus && (resetForm || !selectedStatus || selectedStatus.hidden)) firstStatus.checked = true;
 
             const issueType = trigger.dataset.issueType;
             if (issueType) {
@@ -601,21 +761,39 @@ function actionDialogs() {
                     : warning.dataset.defaultText;
             }
 
-            const disposalDate = dialog.querySelector('input[type="date"]');
-            if (disposalDate && trigger.dataset.purchaseDate) disposalDate.min = trigger.dataset.purchaseDate;
+            const disposalDate = dialog.querySelector('input[name="disposed_at"]');
             if (disposalDate) {
-                const today = new Date();
-                disposalDate.max = [
-                    today.getFullYear(),
-                    String(today.getMonth() + 1).padStart(2, '0'),
-                    String(today.getDate()).padStart(2, '0'),
-                ].join('-');
+                if (trigger.dataset.purchaseDate) disposalDate.min = trigger.dataset.purchaseDate;
+                if (trigger.dataset.today) disposalDate.max = trigger.dataset.today;
+                if (!disposalDate.value) {
+                    disposalDate.value = '';
+                }
             }
 
             dialog.querySelectorAll('.ar-action-preview-note').forEach((note) => { note.hidden = true; });
-            dialog.showModal();
+            if (typeof dialog.showModal === 'function') {
+                dialog.showModal();
+            } else {
+                dialog.setAttribute('open', 'open');
+            }
+            initializeActionDialogDatePickers(dialog);
+
+            if (disposalDate) {
+                const picker = disposalDate._flatpickr;
+                picker?.set('minDate', disposalDate.min || undefined);
+                picker?.set('maxDate', disposalDate.max || undefined);
+
+                const dateUnavailable = Boolean(
+                    disposalDate.min && disposalDate.max && disposalDate.min > disposalDate.max,
+                );
+                const unavailableMessage = dialog.querySelector('[data-ar-disposal-date-unavailable]');
+                const submitButton = disposalDate.form?.querySelector('button[type="submit"]');
+                if (unavailableMessage instanceof HTMLElement) unavailableMessage.hidden = !dateUnavailable;
+                if (submitButton instanceof HTMLButtonElement) submitButton.disabled = dateUnavailable;
+                disposalDate.disabled = dateUnavailable;
+            }
         },
     };
 }
 
-export { registryPage, assetFormDialog, assetFormPage, settingsPage, actionDialogs };
+export { registryPage, assetFormDialog, assetFormPage, settingsPage, actionDialogs, withMultiSelectFilter };
