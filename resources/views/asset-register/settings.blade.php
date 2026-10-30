@@ -3,7 +3,20 @@
 @section('title', __('asset-register::asset-register.settings.title'))
 
 @section('content')
-<main class="ar-page ar-settings-page">
+<main
+    class="ar-page ar-settings-page"
+    x-data="window.HK.assetRegister.settingsPage({
+        i18n: {
+            confirmTitle: @js(__('asset-register::asset-register.messages.confirm_title')),
+            confirmations: {
+                type: @js(__('asset-register::asset-register.messages.confirm_delete_type')),
+                location: @js(__('asset-register::asset-register.messages.confirm_delete_location')),
+            },
+            delete: @js(__('asset-register::asset-register.settings.delete')),
+        },
+    })"
+    data-ar-failed-dialog="{{ old('_asset_register_dialog') }}"
+>
     <nav class="ar-tabs" aria-label="{{ __('asset-register::asset-register.name') }}">
         @foreach ($tabs as $tab)
             <a href="{{ $tab['url'] }}" @class(['ar-tab', 'is-active' => $activeTab === $tab['key']])>
@@ -53,7 +66,7 @@
                     <input type="hidden" name="_asset_register_dialog" value="create-type">
                     <label>{{ __('asset-register::asset-register.settings.name') }} <input name="name" maxlength="100" required value="{{ old('name') }}">@error('name')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
                     <label>{{ __('asset-register::asset-register.settings.prefix') }} <input name="prefix" minlength="2" maxlength="6" required value="{{ old('prefix') }}">@error('prefix')<small class="ar-field-error">{{ $message }}</small>@enderror</label>
-                    <small class="ar-form-hint">{{ __('asset-register::asset-register.settings.first_code_preview') }} <output data-ar-first-code>{{ old('prefix') ? strtoupper(old('prefix')).'-0001' : '--' }}</output></small>
+                    <small class="ar-form-hint">{{ __('asset-register::asset-register.settings.first_code_preview') }} <output data-ar-first-code data-empty-value="--">{{ old('prefix') ? strtoupper(old('prefix')).'-0001' : '--' }}</output></small>
                     <fieldset class="ar-icon-picker">
                         <legend>{{ __('asset-register::asset-register.settings.icon') }}</legend>
                         <div class="ar-icon-picker-options">
@@ -134,7 +147,7 @@
                                         @if ($type->assets_count === 0)
                                             <form method="POST" action="{{ route('asset-register.settings.asset-types.delete', $type->id) }}">
                                                 @csrf @method('DELETE')
-                                                <button class="ar-button ar-button-danger" type="submit" onclick="return window.confirm(@js(__('asset-register::asset-register.messages.confirm_delete_type')))">{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                <button class="ar-button ar-button-danger" type="submit" data-ar-confirmation="type">{{ __('asset-register::asset-register.settings.delete') }}</button>
                                             </form>
                                         @else
                                             <button class="ar-button ar-button-danger" type="button" disabled>{{ __('asset-register::asset-register.settings.delete') }}</button>
@@ -221,7 +234,7 @@
                                         @if ($location->assets_count === 0)
                                             <form method="POST" action="{{ route('asset-register.settings.locations.delete', $location->id) }}">
                                                 @csrf @method('DELETE')
-                                                <button class="ar-button ar-button-danger" type="submit" onclick="return window.confirm(@js(__('asset-register::asset-register.messages.confirm_delete_location')))">{{ __('asset-register::asset-register.settings.delete') }}</button>
+                                                <button class="ar-button ar-button-danger" type="submit" data-ar-confirmation="location">{{ __('asset-register::asset-register.settings.delete') }}</button>
                                             </form>
                                         @else
                                             <button class="ar-button ar-button-danger" type="button" disabled>{{ __('asset-register::asset-register.settings.delete') }}</button>
@@ -242,36 +255,4 @@
         </div>
     </section>
 </main>
-<script>
-    (() => {
-        const failedDialog = @js(old('_asset_register_dialog'));
-        const prefixInput = document.querySelector('#ar-create-type-dialog input[name="prefix"]');
-        const firstCode = document.querySelector('[data-ar-first-code]');
-        prefixInput?.addEventListener('input', () => {
-            const prefix = prefixInput.value.trim().toUpperCase();
-            if (firstCode) firstCode.textContent = prefix ? `${prefix}-0001` : '--';
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!(event.target instanceof Element)) return;
-            const openButton = event.target.closest('[data-ar-open-dialog]');
-            if (openButton) {
-                document.getElementById(openButton.dataset.arOpenDialog)?.showModal();
-                return;
-            }
-
-            const closeButton = event.target.closest('[data-ar-close-dialog]');
-            if (closeButton) closeButton.closest('dialog')?.close();
-        });
-
-        document.querySelectorAll('.ar-dialog').forEach((dialog) => {
-            dialog.addEventListener('click', (event) => {
-                if (event.target === dialog) dialog.close();
-            });
-        });
-
-        if (failedDialog) document.getElementById(`ar-${failedDialog}-dialog`)?.showModal();
-    })();
-</script>
-@include('asset-register::asset-register.styles')
 @endsection

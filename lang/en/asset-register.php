@@ -192,6 +192,7 @@ return [
         'location_in_use' => 'A location in use cannot be deleted.',
     ],
     'messages' => [
+        'confirm_title' => 'Confirm action',
         'type_created' => 'Asset type added.',
         'type_updated' => 'Asset type updated.',
         'type_deleted' => 'Asset type deleted.',

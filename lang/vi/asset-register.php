@@ -192,6 +192,7 @@ return [
         'location_in_use' => 'Không thể xoá nơi đặt đang được sử dụng.',
     ],
     'messages' => [
+        'confirm_title' => 'Xác nhận thao tác',
         'type_created' => 'Đã thêm loại tài sản.',
         'type_updated' => 'Đã cập nhật loại tài sản.',
         'type_deleted' => 'Đã xoá loại tài sản.',
